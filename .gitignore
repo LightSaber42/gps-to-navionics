@@ -1,0 +1,12 @@
+.DS_Store
+
+# Xcode user and build output
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+
+# Local environment files
+.env
+.env.*
+!.env.example
