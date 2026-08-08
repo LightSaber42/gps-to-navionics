@@ -25,7 +25,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Navionics connects to this iPhone over the local network to receive the phone's NMEA position feed.</string>
+	<string>Navionics and your paired shore monitor connect to this iPhone over the local network.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Your precise position powers Navionics streaming and the anchor drift alarm, including while the screen is locked.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

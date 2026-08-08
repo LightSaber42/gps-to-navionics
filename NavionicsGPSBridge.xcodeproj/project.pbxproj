@@ -17,6 +17,15 @@
 		B10000000000000000000008 /* NMEAEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000009 /* NMEAEncoderTests.swift */; };
 		B10000000000000000000009 /* AnchorAlarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000C /* AnchorAlarm.swift */; };
 		B1000000000000000000000A /* AnchorAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* AnchorAlarmTests.swift */; };
+		C10000000000000000000001 /* AnchorPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AnchorPairingView.swift */; };
+		C10000000000000000000002 /* AnchorHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* AnchorHistoryStore.swift */; };
+		C10000000000000000000003 /* AnchorEventLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* AnchorEventLog.swift */; };
+		C10000000000000000000004 /* AnchorSyncProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000004 /* AnchorSyncProtocol.swift */; };
+		C10000000000000000000005 /* AnchorSyncCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000005 /* AnchorSyncCrypto.swift */; };
+		C10000000000000000000006 /* AnchorPairingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* AnchorPairingStore.swift */; };
+		C10000000000000000000007 /* AnchorSyncServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* AnchorSyncServer.swift */; };
+		C10000000000000000000008 /* AnchorSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* AnchorSyncTests.swift */; };
+		C10000000000000000000009 /* AnchorPairingAddressProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AnchorPairingAddressProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +52,15 @@
 		B2000000000000000000000B /* NavionicsGPSBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NavionicsGPSBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2000000000000000000000C /* AnchorAlarm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorAlarm.swift; sourceTree = "<group>"; };
 		B2000000000000000000000D /* AnchorAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorAlarmTests.swift; sourceTree = "<group>"; };
+		C20000000000000000000001 /* AnchorPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorPairingView.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* AnchorHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorHistoryStore.swift; sourceTree = "<group>"; };
+		C20000000000000000000003 /* AnchorEventLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorEventLog.swift; sourceTree = "<group>"; };
+		C20000000000000000000004 /* AnchorSyncProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncProtocol.swift; sourceTree = "<group>"; };
+		C20000000000000000000005 /* AnchorSyncCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncCrypto.swift; sourceTree = "<group>"; };
+		C20000000000000000000006 /* AnchorPairingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorPairingStore.swift; sourceTree = "<group>"; };
+		C20000000000000000000007 /* AnchorSyncServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncServer.swift; sourceTree = "<group>"; };
+		C20000000000000000000008 /* AnchorSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncTests.swift; sourceTree = "<group>"; };
+		C20000000000000000000009 /* AnchorPairingAddressProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorPairingAddressProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +106,9 @@
 			children = (
 				B20000000000000000000001 /* NavionicsGPSBridgeApp.swift */,
 				B2000000000000000000000C /* AnchorAlarm.swift */,
+				C20000000000000000000002 /* AnchorHistoryStore.swift */,
+				C20000000000000000000003 /* AnchorEventLog.swift */,
+				C20000000000000000000001 /* AnchorPairingView.swift */,
 				B20000000000000000000002 /* BridgeController.swift */,
 				B20000000000000000000003 /* ContentView.swift */,
 			);
@@ -108,6 +129,11 @@
 			children = (
 				B20000000000000000000006 /* NMEATCPServer.swift */,
 				B20000000000000000000007 /* NetworkAddressProvider.swift */,
+				C20000000000000000000004 /* AnchorSyncProtocol.swift */,
+				C20000000000000000000005 /* AnchorSyncCrypto.swift */,
+				C20000000000000000000006 /* AnchorPairingStore.swift */,
+				C20000000000000000000007 /* AnchorSyncServer.swift */,
+				C20000000000000000000009 /* AnchorPairingAddressProvider.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -117,6 +143,7 @@
 			children = (
 				B20000000000000000000009 /* NMEAEncoderTests.swift */,
 				B2000000000000000000000D /* AnchorAlarmTests.swift */,
+				C20000000000000000000008 /* AnchorSyncTests.swift */,
 			);
 			path = NavionicsGPSBridgeTests;
 			sourceTree = "<group>";
@@ -236,6 +263,14 @@
 				B10000000000000000000006 /* NMEATCPServer.swift in Sources */,
 				B10000000000000000000007 /* NetworkAddressProvider.swift in Sources */,
 				B10000000000000000000009 /* AnchorAlarm.swift in Sources */,
+				C10000000000000000000001 /* AnchorPairingView.swift in Sources */,
+				C10000000000000000000002 /* AnchorHistoryStore.swift in Sources */,
+				C10000000000000000000003 /* AnchorEventLog.swift in Sources */,
+				C10000000000000000000004 /* AnchorSyncProtocol.swift in Sources */,
+				C10000000000000000000005 /* AnchorSyncCrypto.swift in Sources */,
+				C10000000000000000000006 /* AnchorPairingStore.swift in Sources */,
+				C10000000000000000000007 /* AnchorSyncServer.swift in Sources */,
+				C10000000000000000000009 /* AnchorPairingAddressProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,6 +280,7 @@
 			files = (
 				B10000000000000000000008 /* NMEAEncoderTests.swift in Sources */,
 				B1000000000000000000000A /* AnchorAlarmTests.swift in Sources */,
+				C10000000000000000000008 /* AnchorSyncTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

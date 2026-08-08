@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -19,6 +20,7 @@ import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -28,6 +30,9 @@ import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -38,12 +43,15 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public final class BridgeService extends Service implements LocationListener, NmeaTcpServer.Listener {
+public final class BridgeService extends Service implements LocationListener,
+        NmeaTcpServer.Listener, AnchorSyncServer.Listener {
     static final String ACTION_START = "com.jaco.navionicsgpsbridge.START";
     static final String ACTION_STOP = "com.jaco.navionicsgpsbridge.STOP";
     static final String ACTION_ARM_ANCHOR = "com.jaco.navionicsgpsbridge.ARM_ANCHOR";
     static final String ACTION_DISARM_ANCHOR = "com.jaco.navionicsgpsbridge.DISARM_ANCHOR";
     static final String ACTION_SILENCE_ANCHOR = "com.jaco.navionicsgpsbridge.SILENCE_ANCHOR";
+    static final String ACTION_ROTATE_ANCHOR_PAIRING =
+            "com.jaco.navionicsgpsbridge.ROTATE_ANCHOR_PAIRING";
     static final String EXTRA_ANCHOR_MODE = "anchor_mode";
     static final String EXTRA_ANCHOR_RADIUS = "anchor_radius";
     static final String EXTRA_ANCHOR_LATITUDE = "anchor_latitude";
@@ -57,7 +65,6 @@ public final class BridgeService extends Service implements LocationListener, Nm
     private static final double STALE_FIX_SECONDS = 10.0;
     private static final double LOST_FIX_ALARM_SECONDS = 30.0;
     private static final long BREACH_CONFIRMATION_MILLIS = 5_000L;
-    private static final int MAXIMUM_ANCHOR_TRACK_POINTS = 1_200;
     private static final String PREFERENCES = "bridge_settings";
     private static final String KEY_STREAMING = "streaming_enabled";
     private static final String KEY_ANCHOR_ARMED = "anchor_alarm_armed";
@@ -116,6 +123,11 @@ public final class BridgeService extends Service implements LocationListener, Nm
     private SharedPreferences preferences;
     private LocationManager locationManager;
     private NmeaTcpServer server;
+    private NmeaUdpBroadcaster udpBroadcaster;
+    private AnchorHistoryStore anchorHistoryStore;
+    private AnchorEventStore anchorEventStore;
+    private AnchorPairingStore anchorPairingStore;
+    private AnchorSyncServer anchorSyncServer;
     private ScheduledFuture<?> monitorTask;
     private PowerManager.WakeLock wakeLock;
     private Ringtone alarmRingtone;
@@ -127,10 +139,15 @@ public final class BridgeService extends Service implements LocationListener, Nm
     private boolean anchorAlarmArmed;
     private boolean anchorAlarmTriggered;
     private boolean anchorAlarmSilenced;
+    private boolean breachEventIssued;
+    private boolean lostFixEventIssued;
+    private boolean lowBatteryEventIssued;
+    private boolean criticalBatteryEventIssued;
     private long anchorArmedElapsedMillis;
     private long breachStartedElapsedMillis;
     private Location latestLocation;
     private int clientCount;
+    private List<InetAddress> udpBroadcastAddresses = new ArrayList<>();
     private String listenerDescription = "Stopped";
     private List<BridgeState.NetworkAddress> networkAddresses = new ArrayList<>();
     private String lastSentences = "";
@@ -143,6 +160,8 @@ public final class BridgeService extends Service implements LocationListener, Nm
     private double anchorDistanceMeters = Double.NaN;
     private final List<BridgeState.AnchorTrackPoint> anchorTrackPoints = new ArrayList<>();
     private String anchorAlertReason;
+    private boolean shoreMonitorConnected;
+    private boolean shoreMonitorSoundReady;
     private volatile long lastNetworkRefreshElapsedMillis;
 
     @Override
@@ -151,9 +170,22 @@ public final class BridgeService extends Service implements LocationListener, Nm
         preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         server = new NmeaTcpServer(this);
+        udpBroadcaster = new NmeaUdpBroadcaster();
+        anchorHistoryStore = new AnchorHistoryStore(this);
+        anchorEventStore = new AnchorEventStore(this);
+        anchorPairingStore = new AnchorPairingStore(this);
+        anchorSyncServer = new AnchorSyncServer(this);
+        restoreRenderedAnchorHistory();
+        try {
+            AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
+            anchorSyncServer.start(host.pairingKey, anchorHistoryStore);
+        } catch (GeneralSecurityException pairingError) {
+            error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
+        }
         loadAnchorConfiguration();
         createNotificationChannels();
         refreshNetworkAddresses();
+        updateAnchorSyncState(false);
     }
 
     @Override
@@ -172,6 +204,8 @@ public final class BridgeService extends Service implements LocationListener, Nm
             disarmAnchorAlarm();
         } else if (ACTION_SILENCE_ANCHOR.equals(action)) {
             silenceAnchorAlarm();
+        } else if (ACTION_ROTATE_ANCHOR_PAIRING.equals(action)) {
+            reloadAnchorPairing();
         } else {
             startStreaming();
         }
@@ -195,6 +229,8 @@ public final class BridgeService extends Service implements LocationListener, Nm
             locationUpdatesRegistered = false;
         }
         server.shutdown();
+        udpBroadcaster.stop();
+        anchorSyncServer.shutdown();
         scheduler.shutdownNow();
         stopAlarmPresentation();
         releaseWakeLock();
@@ -252,6 +288,23 @@ public final class BridgeService extends Service implements LocationListener, Nm
         emitState();
     }
 
+    @Override
+    public void onMonitorStatusChanged(boolean connected, boolean soundReady) {
+        synchronized (stateLock) {
+            shoreMonitorConnected = connected;
+            shoreMonitorSoundReady = soundReady;
+        }
+        emitState();
+    }
+
+    @Override
+    public void onAnchorSyncServerError(String message) {
+        synchronized (stateLock) {
+            error = message;
+        }
+        emitState();
+    }
+
     private void loadAnchorConfiguration() {
         synchronized (stateLock) {
             anchorMode = AnchorAlarm.Mode.fromStorageValue(
@@ -273,9 +326,8 @@ public final class BridgeService extends Service implements LocationListener, Nm
             streaming = shouldStream;
             anchorAlarmArmed = shouldArmAnchor && hasAnchorReference;
             anchorArmedElapsedMillis = SystemClock.elapsedRealtime();
-            anchorTrackPoints.clear();
         }
-        if (streaming) server.start(PORT);
+        if (streaming) startNetworkTransports();
         if (isMonitoringRequired()) ensureMonitoringInfrastructure();
     }
 
@@ -292,7 +344,7 @@ public final class BridgeService extends Service implements LocationListener, Nm
         preferences.edit().putBoolean(KEY_STREAMING, true).apply();
         ensureMonitoringInfrastructure();
         refreshNetworkAddresses();
-        server.start(PORT);
+        startNetworkTransports();
         emitState();
     }
 
@@ -305,7 +357,10 @@ public final class BridgeService extends Service implements LocationListener, Nm
             listenerDescription = "Stopped";
         }
         preferences.edit().putBoolean(KEY_STREAMING, false).apply();
-        if (wasStreaming) server.stop();
+        if (wasStreaming) {
+            server.stop();
+            udpBroadcaster.stop();
+        }
         stopMonitoringInfrastructureIfIdle();
         emitState();
     }
@@ -345,14 +400,20 @@ public final class BridgeService extends Service implements LocationListener, Nm
             anchorAlertReason = null;
             anchorArmedElapsedMillis = SystemClock.elapsedRealtime();
             breachStartedElapsedMillis = 0L;
+            breachEventIssued = false;
+            lostFixEventIssued = false;
+            lowBatteryEventIssued = false;
+            criticalBatteryEventIssued = false;
             error = null;
         }
+        anchorHistoryStore.startNewSession();
         persistAnchorConfiguration(true);
         stopAlarmPresentation();
         ensureMonitoringInfrastructure();
         Location location = copyLatestLocation();
         if (location != null) evaluateAnchorPosition(location);
         emitState();
+        updateAnchorSyncState(true);
     }
 
     private void disarmAnchorAlarm() {
@@ -362,13 +423,14 @@ public final class BridgeService extends Service implements LocationListener, Nm
             anchorAlarmSilenced = false;
             anchorAlertReason = null;
             anchorDistanceMeters = Double.NaN;
-            anchorTrackPoints.clear();
             breachStartedElapsedMillis = 0L;
         }
+        anchorEventStore.acknowledgeAll();
         preferences.edit().putBoolean(KEY_ANCHOR_ARMED, false).apply();
         stopAlarmPresentation();
         stopMonitoringInfrastructureIfIdle();
         emitState();
+        updateAnchorSyncState(true);
     }
 
     private void silenceAnchorAlarm() {
@@ -379,8 +441,10 @@ public final class BridgeService extends Service implements LocationListener, Nm
             anchorAlertReason = "Alarm silenced — monitoring continues until the boat is back inside the limit.";
             breachStartedElapsedMillis = 0L;
         }
+        anchorEventStore.acknowledgeAll();
         stopAlarmPresentation();
         emitState();
+        updateAnchorSyncState(true);
         updateMonitoringNotification();
     }
 
@@ -508,11 +572,13 @@ public final class BridgeService extends Service implements LocationListener, Nm
         BridgeState state = snapshot();
         if (state.streaming) transmitLatestFix();
         evaluateAnchorHealth();
+        evaluateBatteryHealth();
         if (state.streaming
                 && SystemClock.elapsedRealtime() - lastNetworkRefreshElapsedMillis > 5_000L) {
             refreshNetworkAddresses();
         }
         if (snapshot().anchorAlarmTriggered) startAlarmPresentation();
+        updateAnchorSyncState(false);
         emitState();
         updateMonitoringNotification();
     }
@@ -537,6 +603,11 @@ public final class BridgeService extends Service implements LocationListener, Nm
             lastSentences = payload;
         }
         server.send(payload);
+        List<InetAddress> broadcastAddresses;
+        synchronized (stateLock) {
+            broadcastAddresses = new ArrayList<>(udpBroadcastAddresses);
+        }
+        udpBroadcaster.send(payload, broadcastAddresses);
     }
 
     private void evaluateAnchorPosition(Location location) {
@@ -550,13 +621,13 @@ public final class BridgeService extends Service implements LocationListener, Nm
                     anchorReferenceLongitude,
                     location.getLatitude(),
                     location.getLongitude());
-            anchorTrackPoints.add(new BridgeState.AnchorTrackPoint(
+            AnchorSyncProtocol.Point recordedPoint = anchorHistoryStore.append(
                     offset.eastMeters,
                     offset.northMeters,
-                    Math.max(0.0, location.getAccuracy())));
-            if (anchorTrackPoints.size() > MAXIMUM_ANCHOR_TRACK_POINTS) {
-                anchorTrackPoints.subList(
-                        0, anchorTrackPoints.size() - MAXIMUM_ANCHOR_TRACK_POINTS).clear();
+                    Math.max(0.0, location.getAccuracy()),
+                    location.getTime());
+            if (recordedPoint != null) {
+                restoreRenderedAnchorHistoryLocked();
             }
             AnchorAlarm.Assessment assessment = AnchorAlarm.assess(
                     anchorReferenceLatitude,
@@ -569,13 +640,14 @@ public final class BridgeService extends Service implements LocationListener, Nm
 
             if (!assessment.definitelyOutside) {
                 breachStartedElapsedMillis = 0L;
+                breachEventIssued = false;
                 if (anchorAlarmSilenced) {
                     anchorAlarmSilenced = false;
                     anchorAlertReason = null;
                 }
                 return;
             }
-            if (anchorAlarmTriggered || anchorAlarmSilenced) return;
+            if (breachEventIssued) return;
             if (breachStartedElapsedMillis == 0L) breachStartedElapsedMillis = now;
             if (now - breachStartedElapsedMillis >= BREACH_CONFIRMATION_MILLIS) {
                 shouldTrigger = true;
@@ -586,43 +658,87 @@ public final class BridgeService extends Service implements LocationListener, Nm
                         : String.format(Locale.US,
                         "Boat moved %.1f m from the anchor (swing limit %.0f m).",
                         assessment.distanceMeters, anchorRadiusMeters);
+                breachEventIssued = true;
             }
         }
-        if (shouldTrigger) triggerAnchorAlarm(reason);
+        if (shouldTrigger) triggerAnchorAlarm(reason, "drift");
     }
 
     private void evaluateAnchorHealth() {
         boolean armed;
-        boolean alreadyAlerting;
-        boolean silenced;
         long armedAt;
         Location location;
         synchronized (stateLock) {
             armed = anchorAlarmArmed;
-            alreadyAlerting = anchorAlarmTriggered;
-            silenced = anchorAlarmSilenced;
             armedAt = anchorArmedElapsedMillis;
             location = latestLocation == null ? null : new Location(latestLocation);
         }
-        if (!armed || alreadyAlerting || silenced) return;
+        if (!armed) return;
 
         double ageSeconds = location == null
                 ? (SystemClock.elapsedRealtime() - armedAt) / 1000.0
                 : fixAgeSeconds(location);
         if (ageSeconds >= LOST_FIX_ALARM_SECONDS) {
+            synchronized (stateLock) {
+                if (lostFixEventIssued) return;
+                lostFixEventIssued = true;
+            }
             triggerAnchorAlarm(String.format(Locale.US,
-                    "GPS position has been unavailable for %.0f seconds.", ageSeconds));
+                    "GPS position has been unavailable for %.0f seconds.", ageSeconds),
+                    "gps_unavailable");
+        } else {
+            synchronized (stateLock) {
+                lostFixEventIssued = false;
+            }
         }
     }
 
-    private void triggerAnchorAlarm(String reason) {
+    private void evaluateBatteryHealth() {
         synchronized (stateLock) {
-            if (!anchorAlarmArmed || anchorAlarmTriggered || anchorAlarmSilenced) return;
+            if (!anchorAlarmArmed) return;
+        }
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery == null) return;
+        int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS,
+                BatteryManager.BATTERY_STATUS_UNKNOWN);
+        if (status == BatteryManager.BATTERY_STATUS_CHARGING
+                || status == BatteryManager.BATTERY_STATUS_FULL) return;
+        int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+        if (level < 0 || scale <= 0) return;
+        int percent = Math.round(level * 100.0f / scale);
+        if (percent <= 10) {
+            synchronized (stateLock) {
+                if (criticalBatteryEventIssued) return;
+                criticalBatteryEventIssued = true;
+            }
+            triggerAnchorAlarm(
+                    "The authoritative boat phone battery is critical at " + percent
+                            + "% and is not charging.",
+                    "battery_critical");
+        } else if (percent <= 20) {
+            synchronized (stateLock) {
+                if (lowBatteryEventIssued) return;
+                lowBatteryEventIssued = true;
+            }
+            triggerAnchorAlarm(
+                    "The authoritative boat phone battery is low at " + percent
+                            + "% and is not charging.",
+                    "battery_low");
+        }
+    }
+
+    private void triggerAnchorAlarm(String reason, String kind) {
+        synchronized (stateLock) {
+            if (!anchorAlarmArmed) return;
             anchorAlarmTriggered = true;
+            anchorAlarmSilenced = false;
             anchorAlertReason = reason;
         }
+        anchorEventStore.append(anchorHistoryStore.sessionId(), kind, reason);
         startAlarmPresentation();
         emitState();
+        updateAnchorSyncState(true);
         updateMonitoringNotification();
     }
 
@@ -655,6 +771,7 @@ public final class BridgeService extends Service implements LocationListener, Nm
                     alarmRingtone.setAudioAttributes(new AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                             .build());
                     if (Build.VERSION.SDK_INT >= 28) {
                         alarmRingtone.setLooping(true);
@@ -702,13 +819,93 @@ public final class BridgeService extends Service implements LocationListener, Nm
         getSystemService(NotificationManager.class).cancel(ALARM_NOTIFICATION_ID);
     }
 
+    private void restoreRenderedAnchorHistory() {
+        synchronized (stateLock) {
+            restoreRenderedAnchorHistoryLocked();
+        }
+    }
+
+    private void restoreRenderedAnchorHistoryLocked() {
+        anchorTrackPoints.clear();
+        for (AnchorSyncProtocol.Point point : anchorHistoryStore.renderedPoints()) {
+            anchorTrackPoints.add(new BridgeState.AnchorTrackPoint(
+                    point.eastMeters,
+                    point.northMeters,
+                    point.accuracyMeters));
+        }
+    }
+
+    private void reloadAnchorPairing() {
+        try {
+            AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
+            anchorSyncServer.rotatePairingKey(host.pairingKey);
+            synchronized (stateLock) {
+                shoreMonitorConnected = false;
+                shoreMonitorSoundReady = false;
+            }
+        } catch (GeneralSecurityException pairingError) {
+            synchronized (stateLock) {
+                error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
+            }
+        }
+        emitState();
+    }
+
+    private void updateAnchorSyncState(boolean sendImmediately) {
+        if (anchorSyncServer == null || anchorHistoryStore == null || anchorEventStore == null) return;
+        BridgeState state = snapshot();
+        BatterySnapshot battery = batterySnapshot();
+        String sessionId = anchorHistoryStore.sessionId();
+        AnchorSyncProtocol.State syncState = new AnchorSyncProtocol.State(
+                sessionId,
+                state.anchorAlarmArmed,
+                state.anchorMode.storageValue,
+                state.anchorRadiusMeters,
+                state.anchorDistanceMeters,
+                state.accuracyMeters >= 0.0 ? state.accuracyMeters : Double.NaN,
+                anchorHistoryStore.latestSequence(),
+                battery.percent,
+                battery.charging,
+                System.currentTimeMillis(),
+                anchorEventStore.eventsForSession(sessionId));
+        anchorSyncServer.updateState(syncState);
+        if (sendImmediately) anchorSyncServer.sendStateNow();
+    }
+
+    private BatterySnapshot batterySnapshot() {
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery == null) return new BatterySnapshot(-1, false);
+        int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS,
+                BatteryManager.BATTERY_STATUS_UNKNOWN);
+        int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+        int percent = level < 0 || scale <= 0 ? -1 : Math.round(level * 100.0f / scale);
+        boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
+                || status == BatteryManager.BATTERY_STATUS_FULL;
+        return new BatterySnapshot(percent, charging);
+    }
+
     private void refreshNetworkAddresses() {
         List<BridgeState.NetworkAddress> addresses = NetworkAddressProvider.currentIpv4Addresses();
+        List<InetAddress> broadcastAddresses =
+                NetworkAddressProvider.currentPrivateIpv4BroadcastAddresses();
         synchronized (stateLock) {
             networkAddresses = addresses;
+            udpBroadcastAddresses = broadcastAddresses;
             lastNetworkRefreshElapsedMillis = SystemClock.elapsedRealtime();
         }
         emitState();
+    }
+
+    private void startNetworkTransports() {
+        server.start(PORT);
+        try {
+            udpBroadcaster.start(PORT);
+        } catch (IOException | RuntimeException udpError) {
+            synchronized (stateLock) {
+                error = "UDP broadcast failed: " + udpError.getLocalizedMessage();
+            }
+        }
     }
 
     private BridgeState snapshot() {
@@ -725,6 +922,7 @@ public final class BridgeService extends Service implements LocationListener, Nm
                     location == null || !location.hasBearing() ? -1.0 : location.getBearing(),
                     location == null ? Double.POSITIVE_INFINITY : fixAgeSeconds(location),
                     clientCount,
+                    udpBroadcastAddresses.size(),
                     listenerDescription,
                     new ArrayList<>(networkAddresses),
                     lastSentences,
@@ -739,7 +937,9 @@ public final class BridgeService extends Service implements LocationListener, Nm
                     anchorRadiusMeters,
                     anchorDistanceMeters,
                     new ArrayList<>(anchorTrackPoints),
-                    anchorAlertReason);
+                    anchorAlertReason,
+                    shoreMonitorConnected,
+                    shoreMonitorSoundReady);
         }
     }
 
@@ -898,11 +1098,14 @@ public final class BridgeService extends Service implements LocationListener, Nm
     }
 
     private String streamingNotificationText(BridgeState state) {
-        if (!state.hasLocation) return "Acquiring GPS fix • TCP " + PORT;
-        if (state.fixAgeSeconds > STALE_FIX_SECONDS) return "GPS fix stale • TCP " + PORT;
-        if (state.clientCount == 0) return "Waiting for Navionics • TCP " + PORT;
-        return "Streaming to " + state.clientCount + " client"
-                + (state.clientCount == 1 ? "" : "s") + " • TCP " + PORT;
+        if (!state.hasLocation) return "Acquiring GPS fix • TCP/UDP " + PORT;
+        if (state.fixAgeSeconds > STALE_FIX_SECONDS) return "GPS fix stale • TCP/UDP " + PORT;
+        if (state.clientCount > 0) {
+            return "Streaming to " + state.clientCount + " TCP client"
+                    + (state.clientCount == 1 ? "" : "s") + " + UDP • " + PORT;
+        }
+        if (state.udpBroadcastTargetCount > 0) return "Broadcasting NMEA • UDP " + PORT;
+        return "Waiting for hotspot or Wi-Fi • TCP/UDP " + PORT;
     }
 
     private void updateMonitoringNotification() {
@@ -914,6 +1117,16 @@ public final class BridgeService extends Service implements LocationListener, Nm
     private static boolean validCoordinate(double latitude, double longitude) {
         return Double.isFinite(latitude) && latitude >= -90.0 && latitude <= 90.0
                 && Double.isFinite(longitude) && longitude >= -180.0 && longitude <= 180.0;
+    }
+
+    private static final class BatterySnapshot {
+        final int percent;
+        final boolean charging;
+
+        BatterySnapshot(int percent, boolean charging) {
+            this.percent = percent;
+            this.charging = charging;
+        }
     }
 
 }

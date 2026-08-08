@@ -12,9 +12,17 @@ GENERATED_DIR="$BUILD_DIR/generated"
 CLASSES_DIR="$BUILD_DIR/classes"
 DEX_DIR="$BUILD_DIR/dex"
 OUTPUT_DIR="$SCRIPT_DIR/app/build/outputs/apk/debug"
+DEPENDENCY_DIR="$SCRIPT_DIR/.manual-dependencies"
+ZXING_JAR="$DEPENDENCY_DIR/zxing-core-3.5.3.jar"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$GENERATED_DIR" "$CLASSES_DIR" "$DEX_DIR" "$OUTPUT_DIR"
+mkdir -p "$GENERATED_DIR" "$CLASSES_DIR" "$DEX_DIR" "$OUTPUT_DIR" "$DEPENDENCY_DIR"
+
+if [[ ! -f "$ZXING_JAR" ]]; then
+    curl -fL --retry 3 \
+        -o "$ZXING_JAR" \
+        "https://repo1.maven.org/maven2/com/google/zxing/core/3.5.3/core-3.5.3.jar"
+fi
 
 "$BUILD_TOOLS/aapt2" compile \
     --dir "$SCRIPT_DIR/app/src/main/res" \
@@ -27,8 +35,8 @@ mkdir -p "$GENERATED_DIR" "$CLASSES_DIR" "$DEX_DIR" "$OUTPUT_DIR"
     --java "$GENERATED_DIR" \
     --min-sdk-version 26 \
     --target-sdk-version 35 \
-    --version-code 3 \
-    --version-name 1.2 \
+    --version-code 4 \
+    --version-name 1.3 \
     --auto-add-overlay \
     -R "$BUILD_DIR/resources.zip"
 
@@ -38,7 +46,7 @@ find "$SCRIPT_DIR/app/src/main/java" "$GENERATED_DIR" -name '*.java' -print \
 "$JDK_DIR/bin/javac" \
     --release 17 \
     -Xlint:all \
-    -classpath "$PLATFORM_JAR" \
+    -classpath "$PLATFORM_JAR:$ZXING_JAR" \
     -d "$CLASSES_DIR" \
     @"$BUILD_DIR/java-sources.txt"
 
@@ -47,10 +55,11 @@ find "$SCRIPT_DIR/app/src/main/java" "$GENERATED_DIR" -name '*.java' -print \
     --lib "$PLATFORM_JAR" \
     --min-api 26 \
     --output "$DEX_DIR" \
-    "$BUILD_DIR/classes.jar"
+    "$BUILD_DIR/classes.jar" \
+    "$ZXING_JAR"
 
 cp "$BUILD_DIR/app-unsigned.apk" "$BUILD_DIR/app-with-dex.apk"
-zip -q -j "$BUILD_DIR/app-with-dex.apk" "$DEX_DIR/classes.dex"
+zip -q -j "$BUILD_DIR/app-with-dex.apk" "$DEX_DIR"/classes*.dex
 
 if [[ ! -f "$SCRIPT_DIR/debug.keystore" ]]; then
     "$JDK_DIR/bin/keytool" -genkeypair \

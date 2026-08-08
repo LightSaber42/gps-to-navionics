@@ -36,6 +36,7 @@ final class BridgeState {
     final double courseDegrees;
     final double fixAgeSeconds;
     final int clientCount;
+    final int udpBroadcastTargetCount;
     final String listenerDescription;
     final List<NetworkAddress> networkAddresses;
     final String lastSentences;
@@ -51,6 +52,8 @@ final class BridgeState {
     final double anchorDistanceMeters;
     final List<AnchorTrackPoint> anchorTrackPoints;
     final String anchorAlertReason;
+    final boolean shoreMonitorConnected;
+    final boolean shoreMonitorSoundReady;
 
     BridgeState(
             boolean streaming,
@@ -63,6 +66,7 @@ final class BridgeState {
             double courseDegrees,
             double fixAgeSeconds,
             int clientCount,
+            int udpBroadcastTargetCount,
             String listenerDescription,
             List<NetworkAddress> networkAddresses,
             String lastSentences,
@@ -77,7 +81,9 @@ final class BridgeState {
             double anchorRadiusMeters,
             double anchorDistanceMeters,
             List<AnchorTrackPoint> anchorTrackPoints,
-            String anchorAlertReason
+            String anchorAlertReason,
+            boolean shoreMonitorConnected,
+            boolean shoreMonitorSoundReady
     ) {
         this.streaming = streaming;
         this.hasLocation = hasLocation;
@@ -89,6 +95,7 @@ final class BridgeState {
         this.courseDegrees = courseDegrees;
         this.fixAgeSeconds = fixAgeSeconds;
         this.clientCount = clientCount;
+        this.udpBroadcastTargetCount = udpBroadcastTargetCount;
         this.listenerDescription = listenerDescription;
         this.networkAddresses = Collections.unmodifiableList(networkAddresses);
         this.lastSentences = lastSentences;
@@ -104,5 +111,7 @@ final class BridgeState {
         this.anchorDistanceMeters = anchorDistanceMeters;
         this.anchorTrackPoints = Collections.unmodifiableList(new java.util.ArrayList<>(anchorTrackPoints));
         this.anchorAlertReason = anchorAlertReason;
+        this.shoreMonitorConnected = shoreMonitorConnected;
+        this.shoreMonitorSoundReady = shoreMonitorSoundReady;
     }
 }

@@ -2,6 +2,7 @@ package com.jaco.navionicsgpsbridge;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -100,6 +101,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView speedValue;
     private TextView courseValue;
     private TextView clientsValue;
+    private TextView udpTargetsValue;
     private TextView serverValue;
     private LinearLayout addressesContainer;
     private TextView sentencesValue;
@@ -115,6 +117,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView armedAnchorMessage;
     private Button armedAnchorSilenceButton;
     private AnchorPlotView anchorPlotView;
+    private TextView normalShoreMonitorValue;
+    private TextView armedShoreMonitorValue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -179,6 +183,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         normalDashboard.setOrientation(LinearLayout.VERTICAL);
         normalDashboard.addView(buildStatusCard(), cardParams());
         normalDashboard.addView(buildAnchorAlarmCard(), cardParams());
+        normalDashboard.addView(buildPairedAlarmCard(false), cardParams());
         normalDashboard.addView(buildGpsCard(), cardParams());
         normalDashboard.addView(buildNetworkCard(), cardParams());
         normalDashboard.addView(buildInstructionsCard(), cardParams());
@@ -305,6 +310,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         noteParams.topMargin = dp(10);
         plotCard.addView(plotNote, noteParams);
         dashboard.addView(plotCard, cardParams());
+        dashboard.addView(buildPairedAlarmCard(true), cardParams());
 
         TextView safety = text(
                 "⚠  Test the alarm and phone volume before relying on it. Keep a physical anchor "
@@ -506,15 +512,43 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         return card;
     }
 
+    private View buildPairedAlarmCard(boolean armedCard) {
+        LinearLayout card = card();
+        addCardHeader(card, "Paired shore alarm");
+        TextView description = text(
+                "Send encrypted heartbeats and alarm events directly over this subnet or Tailscale. The shore phone is read-only and silences only itself.",
+                13,
+                R.color.nav_secondary);
+        description.setLineSpacing(0.0f, 1.12f);
+        card.addView(description, matchWrap());
+        TextView status = addDetailRow(card, "Shore phone", false);
+        if (armedCard) armedShoreMonitorValue = status;
+        else normalShoreMonitorValue = status;
+
+        Button pair = smallButton("Show pairing QR", () -> startActivity(
+                new Intent(this, AnchorPairingActivity.class)));
+        LinearLayout.LayoutParams pairParams = wrapWrap();
+        pairParams.topMargin = dp(10);
+        card.addView(pair, pairParams);
+
+        Button monitor = smallButton("Use this phone on shore", () -> startActivity(
+                new Intent(this, ShoreMonitorActivity.class)));
+        LinearLayout.LayoutParams monitorParams = wrapWrap();
+        monitorParams.topMargin = dp(6);
+        card.addView(monitor, monitorParams);
+        return card;
+    }
+
     private View buildNetworkCard() {
         LinearLayout card = card();
         addCardHeader(card, "Navionics connection");
         TextView protocolValue = addDetailRow(card, "Protocol", false);
-        protocolValue.setText("TCP");
+        protocolValue.setText("TCP + UDP broadcast");
         TextView portValue = addDetailRow(card, "Port", true);
         portValue.setText(String.valueOf(BridgeService.PORT));
-        clientsValue = addDetailRow(card, "Clients", false);
-        serverValue = addDetailRow(card, "Server", false);
+        clientsValue = addDetailRow(card, "TCP clients", false);
+        udpTargetsValue = addDetailRow(card, "UDP networks", false);
+        serverValue = addDetailRow(card, "TCP server", false);
 
         View divider = new View(this);
         divider.setBackgroundColor(0xffe4e7ec);
@@ -524,7 +558,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         dividerParams.bottomMargin = dp(12);
         card.addView(divider, dividerParams);
 
-        TextView hint = text("Enter one of these addresses in Navionics:", 14, R.color.nav_secondary);
+        TextView hint = text(
+                "TCP fallback — enter one of these addresses in Navionics:",
+                14,
+                R.color.nav_secondary);
         card.addView(hint, matchWrap());
 
         addressesContainer = new LinearLayout(this);
@@ -545,11 +582,12 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private View buildInstructionsCard() {
         LinearLayout card = card();
         addCardHeader(card, "Connect in Navionics");
-        addInstruction(card, 1, "Put this Android phone and the iPad on the same Wi‑Fi network.");
+        addInstruction(card, 1, "Turn on this phone's hotspot and connect the iPad to it. Internet is not required.");
         addInstruction(card, 2, "Tap Start Streaming and allow Precise Location and notifications.");
         addInstruction(card, 3, "In Navionics: Menu → Connect a Device → Add Device.");
-        addInstruction(card, 4, "Choose TCP, then enter an address above and port " + BridgeService.PORT + ".");
-        addInstruction(card, 5, "Keep this phone powered during navigation.");
+        addInstruction(card, 4, "Choose UDP. Enter host 0.0.0.0 and port " + BridgeService.PORT + ".");
+        addInstruction(card, 5, "Save the device. TCP remains available as a fallback using an address above.");
+        addInstruction(card, 6, "Keep this phone powered during navigation.");
         return card;
     }
 
@@ -588,6 +626,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 getColor(active ? R.color.nav_error : R.color.nav_blue)));
         renderAnchorAlarm(state);
         renderArmedAnchorDashboard(state);
+        renderShoreMonitorStatus(state);
 
         String visibleError = state.error != null ? state.error : permissionError;
         errorText.setText(visibleError == null ? "" : visibleError);
@@ -613,6 +652,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         }
 
         clientsValue.setText(String.valueOf(state.clientCount));
+        udpTargetsValue.setText(state.udpBroadcastTargetCount == 0
+                ? "Waiting for hotspot"
+                : state.udpBroadcastTargetCount + " active");
         serverValue.setText(state.listenerDescription);
         renderAddresses(state.networkAddresses);
 
@@ -716,6 +758,29 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         anchorMessage.setVisibility(message == null ? View.GONE : View.VISIBLE);
     }
 
+    private void renderShoreMonitorStatus(BridgeState state) {
+        String value;
+        int color;
+        if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
+            value = "Connected • alarm ready";
+            color = R.color.nav_success;
+        } else if (state.shoreMonitorConnected) {
+            value = "Connected • shore sound setup incomplete";
+            color = R.color.nav_warning;
+        } else {
+            value = "Not connected";
+            color = R.color.nav_secondary;
+        }
+        if (normalShoreMonitorValue != null) {
+            normalShoreMonitorValue.setText(value);
+            normalShoreMonitorValue.setTextColor(getColor(color));
+        }
+        if (armedShoreMonitorValue != null) {
+            armedShoreMonitorValue.setText(value);
+            armedShoreMonitorValue.setTextColor(getColor(color));
+        }
+    }
+
     private void renderArmedAnchorDashboard(BridgeState state) {
         if (state.anchorAlarmTriggered) {
             armedAnchorStatusTitle.setText("ANCHOR ALARM");
@@ -801,6 +866,16 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         if (selectedAnchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !latestState.hasAnchorReference) {
             beginMarkAnchor();
+            return;
+        }
+        if (!latestState.shoreMonitorConnected || !latestState.shoreMonitorSoundReady) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Shore alarm is not ready")
+                    .setMessage("You can arm in degraded mode, but the shore phone may not receive or sound alarms. Pair it and complete its alarm setup when possible.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Arm anyway", (dialog, which) ->
+                            beginPermissionProtectedAction(PENDING_ARM_ANCHOR))
+                    .show();
             return;
         }
         beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
@@ -954,7 +1029,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         if (!fineLocation) return "Location permission needed";
         if (!state.hasLocation) return "Acquiring GPS fix";
         if (state.fixAgeSeconds > STALE_FIX_SECONDS) return "GPS fix is stale";
-        if (state.clientCount == 0) return "Waiting for Navionics";
+        if (state.clientCount == 0 && state.udpBroadcastTargetCount == 0) {
+            return "Waiting for hotspot or Wi-Fi";
+        }
+        if (state.clientCount == 0) return "Broadcasting GPS";
         return "Streaming to Navionics";
     }
 
@@ -964,7 +1042,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         if (!state.hasLocation || state.fixAgeSeconds > STALE_FIX_SECONDS) {
             return getColor(R.color.nav_warning);
         }
-        return getColor(state.clientCount > 0 ? R.color.nav_success : R.color.nav_blue);
+        return getColor(state.clientCount > 0 || state.udpBroadcastTargetCount > 0
+                ? R.color.nav_success : R.color.nav_blue);
     }
 
     private LinearLayout card() {
@@ -1151,10 +1230,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         return new BridgeState(
                 false, false,
                 0.0, 0.0, 0.0, -1.0, -1.0, -1.0,
-                Double.POSITIVE_INFINITY, 0, "Stopped",
+                Double.POSITIVE_INFINITY, 0, 0, "Stopped",
                 new ArrayList<>(), "", null,
                 AnchorAlarm.Mode.SHORELINED,
                 false, false, false, false,
-                0.0, 0.0, 15.0, Double.NaN, new ArrayList<>(), null);
+                0.0, 0.0, 15.0, Double.NaN, new ArrayList<>(), null,
+                false, false);
     }
 }

@@ -10,8 +10,8 @@ android {
         applicationId = "com.jaco.navionicsgpsbridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     buildTypes {
@@ -28,4 +28,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation("com.google.zxing:core:3.5.3")
 }

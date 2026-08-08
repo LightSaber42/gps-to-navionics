@@ -26,11 +26,20 @@ final class AnchorPlotView extends View {
     }
 
     void setState(BridgeState state) {
-        points = state.anchorTrackPoints;
-        limitMeters = state.anchorRadiusMeters;
-        alarmTriggered = state.anchorAlarmTriggered;
-        String distance = Double.isFinite(state.anchorDistanceMeters)
-                ? String.format(Locale.US, "Current drift %.1f metres. ", state.anchorDistanceMeters)
+        setRemoteState(
+                state.anchorTrackPoints,
+                state.anchorRadiusMeters,
+                state.anchorAlarmTriggered,
+                state.anchorDistanceMeters);
+    }
+
+    void setRemoteState(List<BridgeState.AnchorTrackPoint> newPoints,
+            double newLimitMeters, boolean newAlarmTriggered, double distanceMeters) {
+        points = newPoints;
+        limitMeters = newLimitMeters;
+        alarmTriggered = newAlarmTriggered;
+        String distance = Double.isFinite(distanceMeters)
+                ? String.format(Locale.US, "Current drift %.1f metres. ", distanceMeters)
                 : "Waiting for a current GPS fix. ";
         setContentDescription(distance + String.format(
                 Locale.US,

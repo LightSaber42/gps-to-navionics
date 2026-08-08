@@ -26,6 +26,9 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var anchorTrackPoints: [AnchorTrackPoint] = []
     @Published private(set) var anchorAlertReason: String?
     @Published private(set) var anchorActionMessage: String?
+    @Published private(set) var shoreMonitorConnected = false
+    @Published private(set) var shoreMonitorSoundReady = false
+    @Published private(set) var anchorPairingURL: URL?
     @Published private var clock = Date()
 
     let port: UInt16 = 11_123
@@ -51,19 +54,25 @@ final class BridgeController: NSObject, ObservableObject,
     private static let staleFixSeconds: TimeInterval = 10
     private static let lostFixAlarmSeconds: TimeInterval = 30
     private static let breachConfirmationSeconds: TimeInterval = 5
-    private static let maximumAnchorTrackPoints = 1_200
-
     private let locationManager = CLLocationManager()
     private let server = NMEATCPServer()
+    private let anchorSyncServer = AnchorSyncServer()
     private let notificationCenter = UNUserNotificationCenter.current()
     private let defaults = UserDefaults.standard
+    private let pairingStore = AnchorPairingStore()
+    private let anchorHistoryStore = AnchorHistoryStore()
+    private let anchorEventLog = AnchorEventLog()
     private var monitorTimer: Timer?
     private var locationUpdatesActive = false
     private var pendingAnchorAction: PendingAnchorAction?
     private var anchorArmedAt: Date?
     private var breachStartedAt: Date?
-    private var nextAnchorTrackPointID = 0
     private var alarmAudioPlayer: AVAudioPlayer?
+    private var pairingConfiguration: AnchorPairingConfiguration?
+    private var breachEventIssued = false
+    private var lostFixEventIssued = false
+    private var lowBatteryEventIssued = false
+    private var criticalBatteryEventIssued = false
 
     override init() {
         authorizationStatus = locationManager.authorizationStatus
@@ -76,6 +85,7 @@ final class BridgeController: NSObject, ObservableObject,
         locationManager.activityType = .otherNavigation
         locationManager.pausesLocationUpdatesAutomatically = false
         locationManager.showsBackgroundLocationIndicator = true
+        UIDevice.current.isBatteryMonitoringEnabled = true
 
         notificationCenter.delegate = self
         registerAlarmNotificationCategory()
@@ -91,13 +101,34 @@ final class BridgeController: NSObject, ObservableObject,
             }
         }
 
+        anchorSyncServer.onMonitorStatusChange = { [weak self] status in
+            DispatchQueue.main.async {
+                self?.shoreMonitorConnected = status.connected
+                self?.shoreMonitorSoundReady = status.soundReady
+            }
+        }
+        anchorSyncServer.onError = { [weak self] message in
+            DispatchQueue.main.async {
+                self?.lastError = message
+            }
+        }
+        do {
+            let configuration = try pairingStore.loadOrCreate()
+            pairingConfiguration = configuration
+            anchorSyncServer.start(pairingKey: configuration.pairingKey)
+        } catch {
+            lastError = "Secure shore-monitor pairing could not be initialized: \(error.localizedDescription)"
+        }
+
         if defaults.bool(forKey: DefaultsKey.armed), anchorReferenceCoordinate != nil {
             anchorAlarmArmed = true
             anchorArmedAt = Date()
+            anchorTrackPoints = anchorHistoryStore.renderedPoints
             updateLocationMonitoring()
             updateMonitorTimer()
         }
         refreshNetworkAddresses()
+        publishAnchorSyncState()
     }
 
     var statusTitle: String {
@@ -293,12 +324,14 @@ final class BridgeController: NSObject, ObservableObject,
 
     func silenceAnchorAlarm() {
         guard anchorAlarmTriggered else { return }
+        anchorEventLog.acknowledgeLocally()
         anchorAlarmTriggered = false
         anchorAlarmSilenced = true
         anchorAlertReason = "Alarm silenced — monitoring continues until the boat is back inside the limit."
         breachStartedAt = nil
         stopAlarmAudio()
         cancelAlarmNotifications()
+        publishAnchorSyncState(immediately: true)
     }
 
     func disarmAnchorAlarm() {
@@ -307,7 +340,7 @@ final class BridgeController: NSObject, ObservableObject,
         anchorAlarmSilenced = false
         anchorAlertReason = nil
         anchorDistanceMeters = nil
-        clearAnchorTrack()
+        anchorEventLog.acknowledgeLocally()
         anchorArmedAt = nil
         breachStartedAt = nil
         stopAlarmAudio()
@@ -315,6 +348,25 @@ final class BridgeController: NSObject, ObservableObject,
         cancelAlarmNotifications()
         updateMonitorTimer()
         updateLocationMonitoring()
+        publishAnchorSyncState(immediately: true)
+    }
+
+    func rotateAnchorPairing() {
+        do {
+            let configuration = try pairingStore.rotate()
+            pairingConfiguration = configuration
+            anchorSyncServer.stop()
+            anchorSyncServer.start(pairingKey: configuration.pairingKey)
+            shoreMonitorConnected = false
+            shoreMonitorSoundReady = false
+            updateAnchorPairingURL()
+        } catch {
+            lastError = "A new pairing code could not be created: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshAnchorPairing() {
+        refreshNetworkAddresses()
     }
 
     func openSettings() {
@@ -324,6 +376,7 @@ final class BridgeController: NSObject, ObservableObject,
 
     func refreshNetworkAddresses() {
         networkAddresses = NetworkAddressProvider.currentIPv4Addresses()
+        updateAnchorPairingURL()
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -340,7 +393,10 @@ final class BridgeController: NSObject, ObservableObject,
             lastError = "Enable Precise Location in Settings for GPS streaming and the anchor alarm."
             pendingAnchorAction = nil
             if anchorAlarmArmed {
-                triggerAnchorAlarm(reason: "Location permission is unavailable, so the anchor position cannot be monitored.")
+                triggerAnchorAlarm(
+                    reason: "Location permission is unavailable, so the anchor position cannot be monitored.",
+                    kind: "location_unavailable"
+                )
             }
         default:
             break
@@ -352,6 +408,7 @@ final class BridgeController: NSObject, ObservableObject,
         latestLocation = location
         clock = Date()
         evaluateAnchorPosition(location)
+        lostFixEventIssued = false
         tryCompletePendingAnchorAction()
     }
 
@@ -434,13 +491,19 @@ final class BridgeController: NSObject, ObservableObject,
             anchorActionMessage = nil
             anchorDistanceMeters = nil
             clearAnchorTrack()
+            _ = anchorHistoryStore.startNewSession()
             anchorArmedAt = Date()
             breachStartedAt = nil
+            breachEventIssued = false
+            lostFixEventIssued = false
+            lowBatteryEventIssued = false
+            criticalBatteryEventIssued = false
             persistAnchorConfiguration(armed: true)
             requestAlarmNotificationAuthorization()
             updateLocationMonitoring()
             updateMonitorTimer()
             evaluateAnchorPosition(latestLocation)
+            publishAnchorSyncState(immediately: true)
             if authorizationStatus == .authorizedWhenInUse {
                 locationManager.requestAlwaysAuthorization()
             }
@@ -493,6 +556,8 @@ final class BridgeController: NSObject, ObservableObject,
             transmitLatestFix()
         }
         evaluateAnchorHealth()
+        evaluateBatteryHealth()
+        publishAnchorSyncState()
     }
 
     private func transmitLatestFix() {
@@ -528,13 +593,14 @@ final class BridgeController: NSObject, ObservableObject,
 
         guard assessment.isDefinitelyOutside else {
             breachStartedAt = nil
+            breachEventIssued = false
             if anchorAlarmSilenced {
                 anchorAlarmSilenced = false
                 anchorAlertReason = nil
             }
             return
         }
-        guard !anchorAlarmTriggered, !anchorAlarmSilenced else { return }
+        guard !breachEventIssued else { return }
 
         let now = Date()
         if breachStartedAt == nil { breachStartedAt = now }
@@ -558,11 +624,12 @@ final class BridgeController: NSObject, ObservableObject,
                 anchorRadiusMeters
             )
         }
-        triggerAnchorAlarm(reason: reason)
+        breachEventIssued = true
+        triggerAnchorAlarm(reason: reason, kind: "drift")
     }
 
     private func evaluateAnchorHealth() {
-        guard anchorAlarmArmed, !anchorAlarmTriggered, !anchorAlarmSilenced else { return }
+        guard anchorAlarmArmed else { return }
         let age: TimeInterval
         if let latestLocation {
             age = fixAge(for: latestLocation)
@@ -572,19 +639,57 @@ final class BridgeController: NSObject, ObservableObject,
             age = 0
         }
         if age >= Self.lostFixAlarmSeconds {
+            guard !lostFixEventIssued else { return }
+            lostFixEventIssued = true
             triggerAnchorAlarm(
-                reason: String(format: "GPS position has been unavailable for %.0f seconds.", age)
+                reason: String(format: "GPS position has been unavailable for %.0f seconds.", age),
+                kind: "gps_unavailable"
+            )
+        } else {
+            lostFixEventIssued = false
+        }
+    }
+
+    private func evaluateBatteryHealth() {
+        guard anchorAlarmArmed else { return }
+        let device = UIDevice.current
+        guard device.batteryLevel >= 0 else { return }
+        switch device.batteryState {
+        case .charging, .full:
+            return
+        default:
+            break
+        }
+        let percent = Int((device.batteryLevel * 100).rounded())
+        if percent <= 10, !criticalBatteryEventIssued {
+            criticalBatteryEventIssued = true
+            triggerAnchorAlarm(
+                reason: "The authoritative boat phone battery is critical at \(percent)% and is not charging.",
+                kind: "battery_critical"
+            )
+        } else if percent <= 20, !lowBatteryEventIssued {
+            lowBatteryEventIssued = true
+            triggerAnchorAlarm(
+                reason: "The authoritative boat phone battery is low at \(percent)% and is not charging.",
+                kind: "battery_low"
             )
         }
     }
 
-    private func triggerAnchorAlarm(reason: String) {
-        guard anchorAlarmArmed, !anchorAlarmTriggered, !anchorAlarmSilenced else { return }
+    private func triggerAnchorAlarm(reason: String, kind: String = "anchor") {
+        guard anchorAlarmArmed else { return }
+        _ = anchorEventLog.append(
+            sessionID: anchorHistoryStore.sessionID,
+            kind: kind,
+            reason: reason
+        )
         anchorAlarmTriggered = true
+        anchorAlarmSilenced = false
         anchorAlertReason = reason
         UINotificationFeedbackGenerator().notificationOccurred(.error)
         startAlarmAudio()
         scheduleAlarmNotifications(reason: reason)
+        publishAnchorSyncState(immediately: true)
     }
 
     private func appendAnchorTrackPoint(
@@ -597,22 +702,17 @@ final class BridgeController: NSObject, ObservableObject,
             pointLatitude: location.coordinate.latitude,
             pointLongitude: location.coordinate.longitude
         )
-        let point = AnchorTrackPoint(
-            id: nextAnchorTrackPointID,
+        guard anchorHistoryStore.append(
             eastMeters: offset.eastMeters,
             northMeters: offset.northMeters,
-            accuracyMeters: max(0, location.horizontalAccuracy)
-        )
-        nextAnchorTrackPointID += 1
-        anchorTrackPoints.append(point)
-        if anchorTrackPoints.count > Self.maximumAnchorTrackPoints {
-            anchorTrackPoints.removeFirst(anchorTrackPoints.count - Self.maximumAnchorTrackPoints)
-        }
+            accuracyMeters: location.horizontalAccuracy,
+            recordedAt: location.timestamp
+        ) != nil else { return }
+        anchorTrackPoints = anchorHistoryStore.renderedPoints
     }
 
     private func clearAnchorTrack() {
         anchorTrackPoints.removeAll(keepingCapacity: true)
-        nextAnchorTrackPointID = 0
     }
 
     private func startAlarmAudio() {
@@ -801,6 +901,50 @@ final class BridgeController: NSObject, ObservableObject,
         if let armed {
             defaults.set(armed, forKey: DefaultsKey.armed)
         }
+    }
+
+    private func updateAnchorPairingURL() {
+        guard let pairingConfiguration else {
+            anchorPairingURL = nil
+            return
+        }
+        anchorPairingURL = pairingStore.pairingURL(
+            configuration: pairingConfiguration,
+            addresses: AnchorPairingAddressProvider.currentIPv4Addresses()
+        )
+    }
+
+    private func publishAnchorSyncState(immediately: Bool = false) {
+        let device = UIDevice.current
+        let batteryPercent = device.batteryLevel >= 0
+            ? Int((device.batteryLevel * 100).rounded())
+            : -1
+        let charging = device.batteryState == .charging || device.batteryState == .full
+        let accuracy: Double?
+        if let latestLocation, latestLocation.horizontalAccuracy >= 0 {
+            accuracy = latestLocation.horizontalAccuracy
+        } else {
+            accuracy = nil
+        }
+        let sessionID = anchorHistoryStore.sessionID
+        let state = AnchorSyncState(
+            sessionID: sessionID,
+            armed: anchorAlarmArmed,
+            mode: anchorMode.rawValue,
+            radiusMeters: anchorRadiusMeters,
+            distanceMeters: anchorDistanceMeters,
+            accuracyMeters: accuracy,
+            latestSequence: anchorHistoryStore.points.last?.sequence ?? 0,
+            batteryPercent: batteryPercent,
+            charging: charging,
+            serverTimeMilliseconds: Int64(Date().timeIntervalSince1970 * 1_000),
+            events: anchorEventLog.events.filter { $0.sessionID == sessionID }
+        )
+        anchorSyncServer.publish(
+            state: state,
+            history: anchorHistoryStore.points,
+            sendImmediately: immediately
+        )
     }
 
     private func fixAge(for location: CLLocation) -> TimeInterval {

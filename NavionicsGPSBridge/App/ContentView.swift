@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var controller = BridgeController()
+    @State private var showingAnchorPairing = false
+    @State private var showingDegradedArmWarning = false
 
     var body: some View {
         NavigationStack {
@@ -12,6 +14,7 @@ struct ContentView: View {
                     } else {
                         statusCard
                         anchorAlarmCard
+                        anchorPairingCard
                         gpsCard
                         networkCard
                         instructionsCard
@@ -23,6 +26,22 @@ struct ContentView: View {
             }
             .navigationTitle(controller.anchorAlarmArmed ? "Anchor watch" : "GPS → Navionics")
             .background(Color(uiColor: .systemGroupedBackground))
+            .sheet(isPresented: $showingAnchorPairing) {
+                AnchorPairingView(
+                    pairingURL: controller.anchorPairingURL,
+                    monitorConnected: controller.shoreMonitorConnected,
+                    monitorSoundReady: controller.shoreMonitorSoundReady,
+                    rotatePairing: controller.rotateAnchorPairing
+                )
+            }
+            .alert("Shore alarm is not ready", isPresented: $showingDegradedArmWarning) {
+                Button("Cancel", role: .cancel) {}
+                Button("Arm anyway", role: .destructive) {
+                    controller.toggleAnchorAlarm()
+                }
+            } message: {
+                Text("You can arm in degraded mode, but the shore phone may not receive or sound alarms. Pair it and complete its alarm setup when possible.")
+            }
         }
     }
 
@@ -80,6 +99,30 @@ struct ContentView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+
+            Label(
+                controller.shoreMonitorConnected
+                    ? (controller.shoreMonitorSoundReady
+                        ? "Shore monitor connected and sound-ready"
+                        : "Shore monitor connected but sound is not ready")
+                    : "Shore monitor disconnected",
+                systemImage: controller.shoreMonitorConnected
+                    ? "antenna.radiowaves.left.and.right"
+                    : "wifi.slash"
+            )
+            .font(.caption.bold())
+            .foregroundStyle(
+                controller.shoreMonitorConnected && controller.shoreMonitorSoundReady
+                    ? Color.green : Color.orange
+            )
+
+            Button {
+                controller.refreshAnchorPairing()
+                showingAnchorPairing = true
+            } label: {
+                Label("Show shore pairing", systemImage: "qrcode")
+            }
+            .font(.subheadline)
 
             if let message = controller.anchorAlertReason {
                 Text(message)
@@ -249,7 +292,7 @@ struct ContentView: View {
             )
             detailRow("Distance from reference", controller.anchorDistanceDescription)
 
-            Button(action: controller.toggleAnchorAlarm) {
+            Button(action: handleAnchorPrimaryAction) {
                 Label(
                     controller.anchorPrimaryButtonTitle,
                     systemImage: controller.anchorAlarmArmed ? "stop.fill" : "anchor"
@@ -288,6 +331,48 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .cardStyle()
+    }
+
+    private var anchorPairingCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(controller.shoreMonitorConnected ? Color.green : Color.blue)
+                    .frame(width: 12, height: 12)
+                Text("Shore monitor")
+                    .font(.headline)
+                Spacer()
+                Text(controller.shoreMonitorConnected ? "Connected" : "Not connected")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Pair one Android phone to receive heartbeat, alarm events, and plot history over Wi‑Fi or Tailscale.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button {
+                controller.refreshAnchorPairing()
+                showingAnchorPairing = true
+            } label: {
+                Label("Pair Android shore monitor", systemImage: "qrcode")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .cardStyle()
+    }
+
+    private func handleAnchorPrimaryAction() {
+        let actionWillArm = !controller.anchorAlarmArmed
+            && (controller.anchorMode == .shorelined
+                || controller.anchorReferenceCoordinate != nil)
+        if actionWillArm
+            && (!controller.shoreMonitorConnected || !controller.shoreMonitorSoundReady) {
+            showingDegradedArmWarning = true
+        } else {
+            controller.toggleAnchorAlarm()
+        }
     }
 
     private var statusCard: some View {
