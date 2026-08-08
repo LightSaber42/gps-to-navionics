@@ -1,10 +1,15 @@
 # GPS to Navionics
 
-Native iPhone and Android apps that convert GPS fixes into NMEA 0183 and serve them over a local TCP socket for the Navionics Boating app on a Wi-Fi-only iPad.
+Native iPhone and Android apps that provide two related functions:
 
-## Data path
+- Convert phone GPS fixes into NMEA 0183 for the Navionics Boating app on a Wi-Fi-only iPad.
+- Run an anchor watch on the authoritative phone left aboard and mirror its alarm state and plot to one read-only Android shore phone.
 
-`Phone GPS -> GPGGA/GPRMC/GPVTG -> TCP port 11123 -> Navionics on iPad`
+## Data paths
+
+`Phone GPS -> GPGGA/GPRMC/GPVTG -> TCP/UDP port 11123 -> Navionics on iPad`
+
+`Boat anchor watch -> authenticated encrypted TCP port 11124 -> Android shore monitor`
 
 This app does not modify iPadOS Location Services and is not a system-wide GPS provider. The receiving app must explicitly support NMEA over TCP.
 
@@ -22,7 +27,7 @@ The app enables continuous background location updates for an explicitly started
 
 The Android Studio project is in [`android`](android). It requires Android 8.0 or newer.
 
-1. Open the `android` directory in Android Studio, or run `android/build-debug.sh` to build a signed debug APK without downloading dependencies.
+1. Open the `android` directory in Android Studio, or run `android/build-debug.sh` to build a signed debug APK. The first command-line build may download the cached ZXing QR dependency.
 2. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the Android phone.
 3. Put the Android phone and iPad on the same Wi-Fi network.
 4. Open **GPS to Navionics**, tap **Start Streaming**, and allow Precise Location and notifications.
@@ -49,15 +54,27 @@ Shorelined mode provides a 3–50 m radius in precise 1 m steps. Free-swinging m
 
 One phone aboard is the authoritative anchor-watch device. It can be either iPhone or Android. A second Android phone can be paired as a read-only shore monitor from **Pair shore monitor** on the boat phone. Scan the QR code with the shore phone's Camera app, or paste the pairing link manually.
 
-The phones connect directly over Wi-Fi or Tailscale on encrypted TCP port `11124`; no internet relay, account, or hosted service is required. The boat sends a small heartbeat and current alarm state every 10 seconds. A durable alarm event is replayed after a reconnect, and the shore phone raises a connection-loss alarm after 30 seconds once it has seen an armed watch. Full five-second plot history is requested only while the shore-monitor screen is open. Only one shore phone can be paired at a time.
+The phones connect directly over Wi-Fi or Tailscale on TCP port `11124`. Tailscale is not needed while both phones are on the same reachable LAN. Once the shore phone leaves that subnet, both phones must be connected to the same Tailscale tailnet. Tailscale then provides the internet path; this project runs no public relay, account system, or hosted service.
+
+Pairing creates a 256-bit secret and embeds the current LAN and Tailscale IPv4 addresses in the QR code. The secret is stored in the iOS Keychain or Android Keystore. Each connection uses an HMAC-authenticated handshake followed by direction-bound, sequenced AES-GCM frames. Reopen or refresh the pairing screen before scanning so its address list is current, and rescan after replacing the pairing or changing to a different tailnet.
+
+The boat sends a small heartbeat and current alarm state every 10 seconds. A durable alarm event is replayed after a reconnect, and the shore phone raises a connection-loss alarm after 30 seconds once it has seen an armed watch. Full five-second plot history is paged in batches of 250 and requested only while the shore-monitor screen is open. Only one authenticated shore phone is active at a time.
 
 Silencing is deliberately local: acknowledging the alarm on one phone does not silence the other. The boat remains authoritative for arming, disarming, radius, and reference position. The shore app can only view state, silence its own alarm, reconnect, or remove its pairing.
 
-On the Android shore phone, grant notifications and Do Not Disturb access, and set the app's battery use to **Unrestricted**. The shore mode does not request GPS and holds no wake lock, which keeps its steady-state work to one heartbeat per 10 seconds; actual battery drain still depends on the handset, signal quality, and whether Tailscale is active, so verify the 12-hour drain on the intended phone. The design target is at most 1% per hour before screen use. Plot transfer and rendering increase drain only while the app is open.
+On the Android shore phone, grant notifications and Do Not Disturb access, and set the app's battery use to **Unrestricted**. Its foreground monitor restarts after an Android reboot only when monitoring was explicitly enabled. The shore mode does not request GPS and holds no wake lock, which keeps its steady-state work to one heartbeat per 10 seconds; actual battery drain still depends on the handset, signal quality, and whether Tailscale is active, so verify the 12-hour drain on the intended phone. The design target is at most 1% per hour before screen use. Plot transfer and rendering increase drain only while the app is open.
+
+The authoritative iPhone uses background location while armed, but iOS will not automatically relaunch the app after a force-quit or device restart. Reopen it and confirm that the armed watch and shore heartbeat have recovered. If an Android Tailscale screen says **Connected** but peers remain unreachable, toggle its Tailscale connection off and on and check that its device key has not expired.
 
 Apple's restricted Critical Alerts entitlement is still required for an iPhone boat alarm notification to override mute and Do Not Disturb after iOS suspends the app. Without that entitlement, the in-app siren and time-sensitive notifications work, but iOS may respect mute or Focus settings. Treat this as an explicit safety limitation and test both phones before leaving the boat.
 
 Test the alarm, notification permission, alarm volume, and battery behavior before relying on it. GPS and phone software are not substitutes for a physical anchor watch.
+
+### Current implementation status
+
+The current protocol is version 1. It has been physically verified with an iPhone as the authoritative armed device and an Android phone as the shore monitor over Tailscale, including authenticated heartbeat/state, battery and distance display, on-demand history catch-up, 30-second link-loss alarm, Android-only silence, and automatic reconnect. The Android-authoritative implementation uses the same protocol and builds successfully; repeat the complete two-Android device checklist before relying on that arrangement aboard.
+
+The device test also has regression coverage for retaining a newly accepted iOS client through its handshake and for keeping Android history requests off the main UI thread. These are important lifecycle/threading requirements, not optional optimizations.
 
 ## Validation
 
@@ -66,4 +83,5 @@ Test the alarm, notification permission, alarm volume, and battery behavior befo
 - Confirm stale fixes are marked invalid after 10 seconds.
 - Test screen lock, network interruption/reconnection, and an offline Wi-Fi network before use aboard.
 - Test separate silence on both phones, a 30-second link loss, alarm replay after reconnect, and plot loading only while the shore screen is open.
+- With Tailscale enabled, confirm each phone can reach the other before leaving the boat and repeat the check after switching between Wi-Fi and cellular data.
 - Keep an independent navigation backup.
