@@ -261,9 +261,17 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func setAnchorRadius(_ radiusMeters: Double) {
-        guard !anchorAlarmArmed else { return }
-        anchorRadiusMeters = anchorMode.adjustedRadius(radiusMeters)
+        guard !anchorAlarmArmed || anchorMode == .freeSwinging else { return }
+        let adjustedRadius = anchorMode.adjustedRadius(radiusMeters)
+        guard adjustedRadius != anchorRadiusMeters else { return }
+        anchorRadiusMeters = adjustedRadius
         persistAnchorConfiguration()
+        if anchorAlarmArmed {
+            if let latestLocation,
+               fixAge(for: latestLocation) <= Self.staleFixSeconds {
+                evaluateAnchorPosition(latestLocation)
+            }
+        }
     }
 
     func toggleAnchorAlarm() {

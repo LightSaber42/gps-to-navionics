@@ -107,6 +107,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView armedAnchorStatusTitle;
     private TextView armedAnchorMode;
     private TextView armedAnchorDistance;
+    private LinearLayout armedSwingRadiusControls;
+    private TextView armedAnchorRadiusValue;
+    private Button armedAnchorRadiusMinusButton;
+    private Button armedAnchorRadiusPlusButton;
     private TextView armedAnchorTrackSummary;
     private TextView armedAnchorMessage;
     private Button armedAnchorSilenceButton;
@@ -225,6 +229,28 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         TextView distanceLabel = text("distance from reference", 14, R.color.nav_secondary);
         distanceLabel.setGravity(Gravity.CENTER);
         plotCard.addView(distanceLabel, matchWrap());
+
+        armedSwingRadiusControls = horizontal();
+        armedSwingRadiusControls.setGravity(Gravity.CENTER_VERTICAL);
+        TextView radiusLabel = text("Swing radius", 14, R.color.nav_secondary);
+        armedSwingRadiusControls.addView(radiusLabel,
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        armedAnchorRadiusMinusButton = radiusStepButton("−", -1.0);
+        armedAnchorRadiusMinusButton.setContentDescription("Decrease swing radius");
+        armedSwingRadiusControls.addView(armedAnchorRadiusMinusButton,
+                new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
+        armedAnchorRadiusValue = text("50 m", 15, R.color.nav_text);
+        armedAnchorRadiusValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        armedAnchorRadiusValue.setGravity(Gravity.CENTER);
+        armedSwingRadiusControls.addView(armedAnchorRadiusValue,
+                new LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT));
+        armedAnchorRadiusPlusButton = radiusStepButton("+", 1.0);
+        armedAnchorRadiusPlusButton.setContentDescription("Increase swing radius");
+        armedSwingRadiusControls.addView(armedAnchorRadiusPlusButton,
+                new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams radiusParams = matchWrap();
+        radiusParams.topMargin = dp(10);
+        plotCard.addView(armedSwingRadiusControls, radiusParams);
 
         anchorPlotView = new AnchorPlotView(this);
         GradientDrawable plotBackground = new GradientDrawable();
@@ -706,6 +732,15 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 ? String.format(Locale.US, "%.1f m", state.anchorDistanceMeters) : "—");
         armedAnchorDistance.setTextColor(getColor(
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
+        boolean radiusAdjustable = state.anchorAlarmArmed
+                && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING;
+        armedSwingRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
+        armedAnchorRadiusValue.setText(String.format(
+                Locale.US, "%.0f m", state.anchorRadiusMeters));
+        armedAnchorRadiusMinusButton.setEnabled(
+                state.anchorRadiusMeters > state.anchorMode.minimumRadiusMeters);
+        armedAnchorRadiusPlusButton.setEnabled(
+                state.anchorRadiusMeters < state.anchorMode.maximumRadiusMeters);
         anchorPlotView.setState(state);
         String accuracy = state.hasLocation && state.accuracyMeters >= 0.0
                 ? String.format(Locale.US, " • GPS ±%.0f m", state.accuracyMeters) : "";
@@ -1023,16 +1058,22 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         button.setMinWidth(0);
         button.setMinHeight(dp(44));
         button.setPadding(0, 0, 0, 0);
-        button.setOnClickListener(view -> {
-            selectedAnchorRadiusMeters = selectedAnchorMode.adjustedRadius(
-                    selectedAnchorRadiusMeters
-                            + direction * selectedAnchorMode.radiusStepMeters);
-            updateRadiusSlider();
-            if (binder != null) {
-                binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
-            }
-        });
+        button.setOnClickListener(view -> adjustAnchorRadius(direction));
         return button;
+    }
+
+    private void adjustAnchorRadius(double direction) {
+        selectedAnchorRadiusMeters = selectedAnchorMode.adjustedRadius(
+                selectedAnchorRadiusMeters
+                        + direction * selectedAnchorMode.radiusStepMeters);
+        updateRadiusSlider();
+        if (armedAnchorRadiusValue != null) {
+            armedAnchorRadiusValue.setText(String.format(
+                    Locale.US, "%.0f m", selectedAnchorRadiusMeters));
+        }
+        if (binder != null) {
+            binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
+        }
     }
 
     private void updateRadiusSlider() {

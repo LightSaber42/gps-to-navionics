@@ -385,17 +385,34 @@ public final class BridgeService extends Service implements LocationListener, Nm
     }
 
     private void updateAnchorSettings(AnchorAlarm.Mode mode, double radiusMeters) {
+        boolean adjustedWhileArmed = false;
         synchronized (stateLock) {
-            if (anchorAlarmArmed) return;
+            if (anchorAlarmArmed) {
+                if (anchorMode != AnchorAlarm.Mode.FREE_SWINGING
+                        || mode != anchorMode) return;
+                double adjustedRadius = mode.adjustedRadius(radiusMeters);
+                if (adjustedRadius == anchorRadiusMeters) return;
+                anchorRadiusMeters = adjustedRadius;
+                adjustedWhileArmed = true;
+            }
             if (anchorMode != mode) {
                 anchorMode = mode;
                 hasAnchorReference = false;
                 anchorDistanceMeters = Double.NaN;
                 anchorTrackPoints.clear();
             }
-            anchorRadiusMeters = mode.adjustedRadius(radiusMeters);
+            if (!adjustedWhileArmed) {
+                anchorRadiusMeters = mode.adjustedRadius(radiusMeters);
+            }
         }
         persistAnchorConfiguration(false);
+        if (adjustedWhileArmed) {
+            Location location = copyLatestLocation();
+            if (location != null && fixAgeSeconds(location) <= STALE_FIX_SECONDS) {
+                evaluateAnchorPosition(location);
+            }
+            updateMonitoringNotification();
+        }
         emitState();
     }
 

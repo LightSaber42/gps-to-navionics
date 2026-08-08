@@ -53,6 +53,10 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity)
 
+            if controller.anchorMode == .freeSwinging {
+                armedSwingRadiusControls
+            }
+
             AnchorDriftPlot(
                 points: controller.anchorTrackPoints,
                 limitMeters: controller.anchorRadiusMeters,
@@ -107,6 +111,64 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .cardStyle()
+    }
+
+    private var armedSwingRadiusControls: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Text("Swing radius")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    controller.setAnchorRadius(
+                        controller.anchorRadiusMeters
+                            - controller.anchorMode.radiusStepMeters
+                    )
+                } label: {
+                    Image(systemName: "minus")
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    controller.anchorRadiusMeters
+                        <= controller.anchorMode.minimumRadiusMeters
+                )
+                .accessibilityLabel("Decrease swing radius")
+
+                Text(String(format: "%.0f m", controller.anchorRadiusMeters))
+                    .font(.headline.monospacedDigit())
+                    .frame(minWidth: 56)
+                    .contentTransition(.numericText())
+
+                Button {
+                    controller.setAnchorRadius(
+                        controller.anchorRadiusMeters
+                            + controller.anchorMode.radiusStepMeters
+                    )
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    controller.anchorRadiusMeters
+                        >= controller.anchorMode.maximumRadiusMeters
+                )
+                .accessibilityLabel("Increase swing radius")
+            }
+
+            Text(String(
+                format: "Adjustable while anchored • %.0f m steps",
+                controller.anchorMode.radiusStepMeters
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var anchorAlarmCard: some View {
