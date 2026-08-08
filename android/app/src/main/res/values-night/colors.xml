@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nav_blue">#5B9DFF</color>
+    <color name="nav_blue_dark">#84ADFF</color>
+    <color name="nav_background">#101828</color>
+    <color name="nav_card">#1D2939</color>
+    <color name="nav_surface_muted">#344054</color>
+    <color name="nav_divider">#475467</color>
+    <color name="nav_plot">#182230</color>
+    <color name="nav_plot_stroke">#52FFFFFF</color>
+    <color name="nav_text">#F9FAFB</color>
+    <color name="nav_secondary">#D0D5DD</color>
+    <color name="nav_warning">#FDB022</color>
+    <color name="nav_error">#F97066</color>
+    <color name="nav_success">#32D583</color>
+</resources>

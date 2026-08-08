@@ -9,6 +9,7 @@ struct AnchorPairingView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showingRotateConfirmation = false
+    @State private var showingMoreOptions = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,11 @@ struct AnchorPairingView: View {
                     Text("On the Android shore phone, scan this code with its Camera app. The GPS bridge opens automatically in read-only monitor mode.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Label(statusText, systemImage: statusSymbol)
+                        .font(.headline)
+                        .foregroundStyle(statusColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if let pairingURL, let image = qrImage(for: pairingURL.absoluteString) {
@@ -35,10 +41,20 @@ struct AnchorPairingView: View {
                         }
                         .buttonStyle(.bordered)
 
-                        Text(pairingURL.absoluteString)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .foregroundStyle(.secondary)
+                        DisclosureGroup("More options", isExpanded: $showingMoreOptions) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text(pairingURL.absoluteString)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.secondary)
+
+                                Button("Replace paired monitor", role: .destructive) {
+                                    showingRotateConfirmation = true
+                                }
+                            }
+                            .padding(.top, 10)
+                        }
+                        .font(.subheadline)
                     } else {
                         ContentUnavailableView(
                             "No reachable address",
@@ -47,16 +63,9 @@ struct AnchorPairingView: View {
                         )
                     }
 
-                    Label(statusText, systemImage: statusSymbol)
-                        .font(.headline)
-                        .foregroundStyle(statusColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button("Replace paired monitor", role: .destructive) {
-                        showingRotateConfirmation = true
-                    }
-                    .disabled(monitorConnected)
                 }
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
                 .padding()
             }
             .navigationTitle("Pair shore monitor")
@@ -80,9 +89,9 @@ struct AnchorPairingView: View {
     }
 
     private var statusText: String {
-        if !monitorConnected { return "Waiting for the shore monitor" }
-        if monitorSoundReady { return "Connected • alarm sound ready" }
-        return "Connected • alarm sound needs attention"
+        if !monitorConnected { return "Not paired · Waiting for shore monitor" }
+        if monitorSoundReady { return "Connected · Sound ready" }
+        return "Connected · Setup needed"
     }
 
     private var statusSymbol: String {

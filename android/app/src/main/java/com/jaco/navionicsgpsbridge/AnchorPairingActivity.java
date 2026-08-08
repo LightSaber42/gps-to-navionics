@@ -14,6 +14,7 @@ import android.os.IBinder;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -87,13 +88,13 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         runOnUiThread(() -> {
             if (monitorStatusValue == null) return;
             if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
-                monitorStatusValue.setText("Connected • shore alarm is sound-ready");
+                monitorStatusValue.setText("Connected · Sound ready");
                 monitorStatusValue.setTextColor(getColor(R.color.nav_success));
             } else if (state.shoreMonitorConnected) {
-                monitorStatusValue.setText("Connected • complete sound setup on shore phone");
+                monitorStatusValue.setText("Connected · Setup needed");
                 monitorStatusValue.setTextColor(getColor(R.color.nav_warning));
             } else {
-                monitorStatusValue.setText("Waiting for shore phone");
+                monitorStatusValue.setText("Not paired · Waiting for shore monitor");
                 monitorStatusValue.setTextColor(getColor(R.color.nav_secondary));
             }
         });
@@ -107,9 +108,20 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER_HORIZONTAL);
         page.setPadding(dp(20), dp(24), dp(20), dp(32));
-        scroll.addView(page, new ScrollView.LayoutParams(
+        ScrollView.LayoutParams pageParams = new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
+                ScrollView.LayoutParams.WRAP_CONTENT);
+        pageParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        scroll.addView(page, pageParams);
+        scroll.addOnLayoutChangeListener((view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            ViewGroup.LayoutParams params = page.getLayoutParams();
+            int targetWidth = Math.min(right - left, dp(600));
+            if (params.width != targetWidth) {
+                params.width = targetWidth;
+                page.setLayoutParams(params);
+            }
+        });
 
         TextView title = text("Pair shore monitor", 28, R.color.nav_text);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -124,11 +136,20 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         page.addView(subtitle, subtitleParams);
 
         LinearLayout card = card();
+        monitorStatusValue = text("Not paired · Waiting for shore monitor", 14, R.color.nav_secondary);
+        monitorStatusValue.setTypeface(Typeface.DEFAULT_BOLD);
+        monitorStatusValue.setGravity(Gravity.CENTER);
+        card.addView(monitorStatusValue, matchWrap());
         qrView = new ImageView(this);
         qrView.setAdjustViewBounds(true);
+        qrView.setMaxWidth(dp(310));
+        qrView.setMaxHeight(dp(310));
         qrView.setContentDescription("Shore-monitor pairing QR code");
-        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(dp(310), dp(310));
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
         qrParams.gravity = Gravity.CENTER_HORIZONTAL;
+        qrParams.topMargin = dp(12);
         card.addView(qrView, qrParams);
         TextView instruction = text(
                 "On the Android shore phone, use Camera to scan this code, then tap the pairing link.",
@@ -138,12 +159,6 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         LinearLayout.LayoutParams instructionParams = matchWrap();
         instructionParams.topMargin = dp(12);
         card.addView(instruction, instructionParams);
-        monitorStatusValue = text("Waiting for shore phone", 14, R.color.nav_secondary);
-        monitorStatusValue.setTypeface(Typeface.DEFAULT_BOLD);
-        monitorStatusValue.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams monitorStatusParams = matchWrap();
-        monitorStatusParams.topMargin = dp(10);
-        card.addView(monitorStatusValue, monitorStatusParams);
         addressValue = text("", 13, R.color.nav_secondary);
         addressValue.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams addressParams = matchWrap();
@@ -154,33 +169,44 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         LinearLayout.LayoutParams errorParams = matchWrap();
         errorParams.topMargin = dp(8);
         card.addView(errorValue, errorParams);
+        Button share = button("Share pairing link", R.color.nav_blue);
+        share.setOnClickListener(view -> sharePairingLink());
+        LinearLayout.LayoutParams shareParams = matchWrap();
+        shareParams.topMargin = dp(12);
+        card.addView(share, shareParams);
         page.addView(card, cardParams());
 
-        LinearLayout manualCard = card();
-        TextView manualTitle = text("Manual fallback", 18, R.color.nav_text);
+        LinearLayout options = card();
+        options.setVisibility(View.GONE);
+        TextView manualTitle = text("Pairing link", 14, R.color.nav_secondary);
         manualTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        manualCard.addView(manualTitle, matchWrap());
+        options.addView(manualTitle, matchWrap());
         pairingLinkValue = text("", 12, R.color.nav_secondary);
         pairingLinkValue.setTextIsSelectable(true);
         pairingLinkValue.setMovementMethod(new ScrollingMovementMethod());
         LinearLayout.LayoutParams linkParams = matchWrap();
         linkParams.topMargin = dp(10);
         linkParams.bottomMargin = dp(12);
-        manualCard.addView(pairingLinkValue, linkParams);
-        Button share = button("Share pairing link", R.color.nav_blue);
-        share.setOnClickListener(view -> sharePairingLink());
-        manualCard.addView(share, matchWrap());
-        page.addView(manualCard, cardParams());
+        options.addView(pairingLinkValue, linkParams);
 
         Button refresh = button("Refresh addresses", R.color.nav_blue_dark);
         refresh.setOnClickListener(view -> refreshPairingCode());
-        page.addView(refresh, matchWrap());
+        options.addView(refresh, matchWrap());
 
-        Button rotate = button("Invalidate pairing and make a new code", R.color.nav_error);
+        Button rotate = button("Replace paired monitor", R.color.nav_error);
         LinearLayout.LayoutParams rotateParams = matchWrap();
         rotateParams.topMargin = dp(12);
-        page.addView(rotate, rotateParams);
+        options.addView(rotate, rotateParams);
         rotate.setOnClickListener(view -> confirmRotate());
+
+        Button optionsToggle = disclosureButton("More options");
+        optionsToggle.setOnClickListener(view -> {
+            boolean expanded = options.getVisibility() == View.VISIBLE;
+            options.setVisibility(expanded ? View.GONE : View.VISIBLE);
+            optionsToggle.setText(expanded ? "More options  ›" : "More options  ⌄");
+        });
+        page.addView(optionsToggle, cardParams());
+        page.addView(options, cardParams());
         return scroll;
     }
 
@@ -274,6 +300,24 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         background.setCornerRadius(dp(12));
         button.setBackground(background);
         button.setMinHeight(dp(48));
+        return button;
+    }
+
+    private Button disclosureButton(String title) {
+        Button button = new Button(this);
+        button.setText(title + "  ›");
+        button.setTextSize(16);
+        button.setTextColor(getColor(R.color.nav_text));
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        button.setPadding(dp(16), 0, dp(16), 0);
+        button.setMinHeight(dp(54));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_card));
+        background.setCornerRadius(dp(16));
+        button.setBackground(background);
+        button.setElevation(dp(1));
         return button;
     }
 

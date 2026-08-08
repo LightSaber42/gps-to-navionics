@@ -9,7 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -26,10 +26,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -43,6 +40,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private static final int PENDING_STREAM = 1;
     private static final int PENDING_MARK_ANCHOR = 2;
     private static final int PENDING_ARM_ANCHOR = 3;
+    private static final int SECTION_BRIDGE = 0;
+    private static final int SECTION_ANCHOR = 1;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -63,33 +62,39 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private String permissionError;
     private String anchorActionMessage;
     private int pendingPermissionAction;
-    private boolean renderingAnchorControls;
-    private boolean anchorRadiusTracking;
+    private int selectedSection = SECTION_BRIDGE;
     private boolean lastRenderedAnchorArmed;
+    private boolean lastRenderedAnchorTriggered;
     private AnchorAlarm.Mode selectedAnchorMode = AnchorAlarm.Mode.SHORELINED;
     private double selectedAnchorRadiusMeters = 15.0;
 
     private ScrollView pageScrollView;
     private TextView pageTitle;
     private LinearLayout normalDashboard;
+    private LinearLayout anchorDashboard;
+    private LinearLayout disarmedAnchorDashboard;
+    private LinearLayout armedAnchorContainer;
     private LinearLayout armedAnchorDashboard;
+    private Button bridgeSectionButton;
+    private Button anchorSectionButton;
     private View statusDot;
     private TextView statusTitle;
+    private TextView bridgeGpsMetric;
+    private TextView bridgeClientMetric;
     private Button streamButton;
     private TextView errorText;
     private Button settingsButton;
     private View anchorStatusDot;
     private TextView anchorStatusTitle;
     private TextView anchorDescription;
-    private RadioButton shorelinedModeButton;
-    private RadioButton freeSwingingModeButton;
-    private SeekBar anchorRadiusSlider;
+    private Button shorelinedModeButton;
+    private Button freeSwingingModeButton;
     private TextView anchorRadiusValue;
     private TextView anchorRadiusHint;
     private Button anchorRadiusMinusButton;
     private Button anchorRadiusPlusButton;
-    private TextView anchorReferenceValue;
-    private TextView anchorDistanceValue;
+    private LinearLayout freeSwingingWorkflow;
+    private TextView anchorStepOneDetail;
     private TextView anchorMessage;
     private Button anchorPrimaryButton;
     private Button markAnchorButton;
@@ -109,6 +114,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView armedAnchorStatusTitle;
     private TextView armedAnchorMode;
     private TextView armedAnchorDistance;
+    private TextView armedAnchorDistanceLabel;
     private LinearLayout armedSwingRadiusControls;
     private TextView armedAnchorRadiusValue;
     private Button armedAnchorRadiusMinusButton;
@@ -125,7 +131,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(getColor(R.color.nav_background));
         getWindow().setNavigationBarColor(getColor(R.color.nav_background));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        boolean darkMode = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        getWindow().getDecorView().setSystemUiVisibility(darkMode ? 0
+                : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         setContentView(buildContent());
         render(latestState);
     }
@@ -166,41 +175,68 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(pagePadding, dp(12), pagePadding, dp(28));
-        pageScrollView.addView(content, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        ScrollView.LayoutParams contentParams = new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        contentParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        pageScrollView.addView(content, contentParams);
+        pageScrollView.addOnLayoutChangeListener((view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            ViewGroup.LayoutParams rawParams = content.getLayoutParams();
+            int targetWidth = Math.min(right - left, dp(720));
+            if (rawParams.width != targetWidth) {
+                rawParams.width = targetWidth;
+                content.setLayoutParams(rawParams);
+            }
+        });
 
         pageScrollView.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
             return insets;
         });
 
-        pageTitle = text("GPS → Navionics", 30, R.color.nav_text);
+        pageTitle = text("GPS Bridge", 28, R.color.nav_text);
         pageTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        pageTitle.setPadding(dp(4), dp(10), 0, dp(16));
+        pageTitle.setPadding(dp(4), dp(10), 0, dp(12));
         content.addView(pageTitle, matchWrap());
+        content.addView(buildSectionSwitcher(), cardParams());
 
         normalDashboard = new LinearLayout(this);
         normalDashboard.setOrientation(LinearLayout.VERTICAL);
         normalDashboard.addView(buildStatusCard(), cardParams());
-        normalDashboard.addView(buildAnchorAlarmCard(), cardParams());
-        normalDashboard.addView(buildPairedAlarmCard(false), cardParams());
-        normalDashboard.addView(buildGpsCard(), cardParams());
         normalDashboard.addView(buildNetworkCard(), cardParams());
-        normalDashboard.addView(buildInstructionsCard(), cardParams());
-        normalDashboard.addView(buildDiagnosticsCard(), cardParams());
-
-        TextView safety = text(
-                "⚠  Test the alarm and phone volume before relying on it. GPS, battery, and Android "
-                        + "settings can fail; keep a physical anchor watch and an independent navigation backup.",
-                13, R.color.nav_secondary);
-        safety.setLineSpacing(0.0f, 1.18f);
-        safety.setPadding(dp(5), dp(2), dp(5), dp(12));
-        normalDashboard.addView(safety, matchWrap());
+        LinearLayout setupContent = vertical();
+        setupContent.addView(buildInstructionsCard(), cardParams());
+        normalDashboard.addView(buildDisclosureSection("Setup in Navionics", setupContent), cardParams());
+        LinearLayout bridgeDetails = vertical();
+        bridgeDetails.addView(buildGpsCard(), cardParams());
+        bridgeDetails.addView(buildDiagnosticsCard(), cardParams());
+        normalDashboard.addView(buildDisclosureSection("GPS and diagnostics", bridgeDetails), cardParams());
+        normalDashboard.addView(safetyNote(), matchWrap());
         content.addView(normalDashboard, matchWrap());
 
+        anchorDashboard = vertical();
+        disarmedAnchorDashboard = vertical();
+        disarmedAnchorDashboard.addView(buildAnchorAlarmCard(), cardParams());
+        disarmedAnchorDashboard.addView(buildPairedAlarmCard(false), cardParams());
+        LinearLayout anchorDetails = vertical();
+        anchorDetails.addView(buildAnchorDetailsCard(), cardParams());
+        disarmedAnchorDashboard.addView(
+                buildDisclosureSection("Watch details", anchorDetails), cardParams());
+        disarmedAnchorDashboard.addView(safetyNote(), matchWrap());
+        anchorDashboard.addView(disarmedAnchorDashboard, matchWrap());
+
         armedAnchorDashboard = buildArmedAnchorDashboard();
-        armedAnchorDashboard.setVisibility(View.GONE);
-        content.addView(armedAnchorDashboard, matchWrap());
+        armedAnchorContainer = vertical();
+        armedAnchorContainer.addView(armedAnchorDashboard, matchWrap());
+        armedAnchorContainer.addView(buildPairedAlarmCard(true), cardParams());
+        LinearLayout armedDetails = vertical();
+        armedDetails.addView(buildAnchorDetailsCard(), cardParams());
+        armedAnchorContainer.addView(
+                buildDisclosureSection("Watch details", armedDetails), cardParams());
+        armedAnchorContainer.addView(safetyNote(), matchWrap());
+        anchorDashboard.addView(armedAnchorContainer, matchWrap());
+        content.addView(anchorDashboard, matchWrap());
+        selectSection(SECTION_BRIDGE, false);
         return pageScrollView;
     }
 
@@ -231,9 +267,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         distanceParams.topMargin = dp(14);
         plotCard.addView(armedAnchorDistance, distanceParams);
 
-        TextView distanceLabel = text("distance from reference", 14, R.color.nav_secondary);
-        distanceLabel.setGravity(Gravity.CENTER);
-        plotCard.addView(distanceLabel, matchWrap());
+        armedAnchorDistanceLabel = text("distance from reference", 14, R.color.nav_secondary);
+        armedAnchorDistanceLabel.setGravity(Gravity.CENTER);
+        plotCard.addView(armedAnchorDistanceLabel, matchWrap());
 
         armedSwingRadiusControls = horizontal();
         armedSwingRadiusControls.setGravity(Gravity.CENTER_VERTICAL);
@@ -261,17 +297,18 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         GradientDrawable plotBackground = new GradientDrawable();
         plotBackground.setColor(getColor(R.color.nav_background));
         plotBackground.setCornerRadius(dp(14));
-        plotBackground.setStroke(dp(1), 0x24000000);
+        plotBackground.setStroke(dp(1), getColor(R.color.nav_plot_stroke));
         anchorPlotView.setBackground(plotBackground);
         LinearLayout.LayoutParams plotParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(360));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         plotParams.topMargin = dp(14);
         plotCard.addView(anchorPlotView, plotParams);
 
-        TextView legend = text(
-                "Blue: GPS trail   •   Green: boat now   •   Orange: alarm limit",
-                12, R.color.nav_secondary);
+        LinearLayout legend = horizontal();
         legend.setGravity(Gravity.CENTER);
+        addLegendItem(legend, R.color.nav_blue_dark, "GPS trail");
+        addLegendItem(legend, R.color.nav_success, "Boat now");
+        addLegendItem(legend, R.color.nav_warning, "Alarm limit");
         LinearLayout.LayoutParams legendParams = matchWrap();
         legendParams.topMargin = dp(9);
         plotCard.addView(legend, legendParams);
@@ -296,29 +333,21 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         silenceParams.topMargin = dp(10);
         plotCard.addView(armedAnchorSilenceButton, silenceParams);
 
-        Button disarmButton = actionButton("■  Disarm anchor alarm", R.color.nav_error);
+        Button disarmButton = actionButton("■  Disarm anchor watch", R.color.nav_error);
         disarmButton.setOnClickListener(view -> toggleAnchorAlarm());
         LinearLayout.LayoutParams disarmParams = matchWrap();
         disarmParams.topMargin = dp(10);
         plotCard.addView(disarmButton, disarmParams);
 
         TextView plotNote = text(
-                "North-up • automatically zoomed to show the recent trail and complete alarm boundary.",
+                "North-up • focused on the alarm boundary, current position, and recent trail. "
+                        + "Isolated older GPS outliers do not shrink the plot.",
                 12, R.color.nav_secondary);
         plotNote.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams noteParams = matchWrap();
         noteParams.topMargin = dp(10);
         plotCard.addView(plotNote, noteParams);
         dashboard.addView(plotCard, cardParams());
-        dashboard.addView(buildPairedAlarmCard(true), cardParams());
-
-        TextView safety = text(
-                "⚠  Test the alarm and phone volume before relying on it. Keep a physical anchor "
-                        + "watch and an independent navigation backup.",
-                13, R.color.nav_secondary);
-        safety.setLineSpacing(0.0f, 1.18f);
-        safety.setPadding(dp(5), dp(2), dp(5), dp(12));
-        dashboard.addView(safety, matchWrap());
         return dashboard;
     }
 
@@ -336,6 +365,18 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         line.addView(statusTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         card.addView(line, matchWrap());
 
+        LinearLayout metrics = horizontal();
+        metrics.setGravity(Gravity.CENTER);
+        bridgeGpsMetric = addMetric(metrics, "GPS", "—");
+        addMetricDivider(metrics);
+        bridgeClientMetric = addMetric(metrics, "Navionics", "0 clients");
+        addMetricDivider(metrics);
+        TextView portMetric = addMetric(metrics, "Port", String.valueOf(BridgeService.PORT));
+        portMetric.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        LinearLayout.LayoutParams metricsParams = matchWrap();
+        metricsParams.topMargin = dp(16);
+        card.addView(metrics, metricsParams);
+
         streamButton = new Button(this);
         streamButton.setAllCaps(false);
         streamButton.setTextSize(16);
@@ -344,7 +385,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         streamButton.setMinHeight(dp(52));
         streamButton.setOnClickListener(view -> toggleStreaming());
         LinearLayout.LayoutParams buttonParams = matchWrap();
-        buttonParams.topMargin = dp(14);
+        buttonParams.topMargin = dp(16);
         card.addView(streamButton, buttonParams);
 
         errorText = text("", 13, R.color.nav_error);
@@ -379,34 +420,18 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         descriptionParams.topMargin = dp(9);
         card.addView(anchorDescription, descriptionParams);
 
-        RadioGroup modes = new RadioGroup(this);
-        modes.setOrientation(RadioGroup.HORIZONTAL);
-        shorelinedModeButton = new RadioButton(this);
-        shorelinedModeButton.setId(View.generateViewId());
-        shorelinedModeButton.setText("Shorelined");
-        shorelinedModeButton.setTextSize(14);
-        freeSwingingModeButton = new RadioButton(this);
-        freeSwingingModeButton.setId(View.generateViewId());
-        freeSwingingModeButton.setText("Free swinging");
-        freeSwingingModeButton.setTextSize(14);
+        LinearLayout modes = horizontal();
+        modes.setPadding(dp(4), dp(4), dp(4), dp(4));
+        GradientDrawable modesBackground = new GradientDrawable();
+        modesBackground.setColor(getColor(R.color.nav_surface_muted));
+        modesBackground.setCornerRadius(dp(13));
+        modes.setBackground(modesBackground);
+        shorelinedModeButton = modeButton("Shorelined", AnchorAlarm.Mode.SHORELINED);
+        freeSwingingModeButton = modeButton("Free swinging", AnchorAlarm.Mode.FREE_SWINGING);
         modes.addView(shorelinedModeButton,
-                new RadioGroup.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+                new LinearLayout.LayoutParams(0, dp(44), 1));
         modes.addView(freeSwingingModeButton,
-                new RadioGroup.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        modes.setOnCheckedChangeListener((group, checkedId) -> {
-            if (renderingAnchorControls) return;
-            AnchorAlarm.Mode newMode = checkedId == freeSwingingModeButton.getId()
-                    ? AnchorAlarm.Mode.FREE_SWINGING : AnchorAlarm.Mode.SHORELINED;
-            if (newMode == selectedAnchorMode) return;
-            selectedAnchorMode = newMode;
-            selectedAnchorRadiusMeters = newMode.defaultRadiusMeters;
-            updateRadiusSlider();
-            anchorActionMessage = null;
-            if (binder != null) {
-                binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
-            }
-            renderAnchorAlarm(latestState);
-        });
+                new LinearLayout.LayoutParams(0, dp(44), 1));
         LinearLayout.LayoutParams modeParams = matchWrap();
         modeParams.topMargin = dp(10);
         card.addView(modes, modeParams);
@@ -431,40 +456,23 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         radiusLineParams.topMargin = dp(10);
         card.addView(radiusLine, radiusLineParams);
 
-        anchorRadiusSlider = new SeekBar(this);
-        anchorRadiusSlider.setMax(radiusMaximumProgress(selectedAnchorMode));
-        anchorRadiusSlider.setProgress(radiusProgress(
-                selectedAnchorMode, selectedAnchorRadiusMeters));
-        anchorRadiusSlider.setContentDescription("Anchor alarm radius");
-        anchorRadiusSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser || renderingAnchorControls) return;
-                selectedAnchorRadiusMeters = radiusFromProgress(selectedAnchorMode, progress);
-                anchorRadiusValue.setText(String.format(
-                        Locale.US, "%.0f m", selectedAnchorRadiusMeters));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                anchorRadiusTracking = true;
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                anchorRadiusTracking = false;
-                if (binder != null) {
-                    binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
-                }
-            }
-        });
-        card.addView(anchorRadiusSlider, matchWrap());
-
         anchorRadiusHint = text("3–50 m range • 1 m steps", 12, R.color.nav_secondary);
+        anchorRadiusHint.setGravity(Gravity.END);
         card.addView(anchorRadiusHint, matchWrap());
 
-        anchorReferenceValue = addDetailRow(card, "Reference position", true);
-        anchorDistanceValue = addDetailRow(card, "Distance from reference", false);
+        freeSwingingWorkflow = vertical();
+        freeSwingingWorkflow.setPadding(0, dp(10), 0, 0);
+        anchorStepOneDetail = addWorkflowStep(
+                freeSwingingWorkflow,
+                "1",
+                "Mark anchor position",
+                "Do this while the boat is over the anchor.");
+        addWorkflowStep(
+                freeSwingingWorkflow,
+                "2",
+                "Arm after paying out the rode",
+                "The watch uses the marked point as its centre.");
+        card.addView(freeSwingingWorkflow, matchWrap());
 
         anchorPrimaryButton = actionButton("Arm anchor alarm", R.color.nav_blue);
         anchorPrimaryButton.setOnClickListener(view -> toggleAnchorAlarm());
@@ -489,14 +497,6 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         anchorMessage.setPadding(0, dp(9), 0, 0);
         card.addView(anchorMessage, matchWrap());
 
-        TextView behavior = text(
-                "A drift must remain outside the radius for 5 seconds. The alarm also sounds "
-                        + "if GPS is lost for 30 seconds.",
-                12, R.color.nav_secondary);
-        behavior.setLineSpacing(0.0f, 1.12f);
-        LinearLayout.LayoutParams behaviorParams = matchWrap();
-        behaviorParams.topMargin = dp(10);
-        card.addView(behavior, behaviorParams);
         return card;
     }
 
@@ -514,24 +514,24 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private View buildPairedAlarmCard(boolean armedCard) {
         LinearLayout card = card();
-        addCardHeader(card, "Paired shore alarm");
+        addCardHeader(card, "Shore monitor");
         TextView description = text(
-                "Send encrypted heartbeats and alarm events directly over this subnet or Tailscale. The shore phone is read-only and silences only itself.",
+                "Pair one Android phone for remote alarm and connection-loss alerts.",
                 13,
                 R.color.nav_secondary);
         description.setLineSpacing(0.0f, 1.12f);
         card.addView(description, matchWrap());
-        TextView status = addDetailRow(card, "Shore phone", false);
+        TextView status = addDetailRow(card, "Status", false);
         if (armedCard) armedShoreMonitorValue = status;
         else normalShoreMonitorValue = status;
 
-        Button pair = smallButton("Show pairing QR", () -> startActivity(
+        Button pair = smallButton("Pair or view code", () -> startActivity(
                 new Intent(this, AnchorPairingActivity.class)));
         LinearLayout.LayoutParams pairParams = wrapWrap();
         pairParams.topMargin = dp(10);
         card.addView(pair, pairParams);
 
-        Button monitor = smallButton("Use this phone on shore", () -> startActivity(
+        Button monitor = smallButton("Use this phone as shore monitor", () -> startActivity(
                 new Intent(this, ShoreMonitorActivity.class)));
         LinearLayout.LayoutParams monitorParams = wrapWrap();
         monitorParams.topMargin = dp(6);
@@ -542,16 +542,19 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private View buildNetworkCard() {
         LinearLayout card = card();
         addCardHeader(card, "Navionics connection");
+        TextView summary = text(
+                "Use UDP for the simplest hotspot connection. TCP remains available as a fallback.",
+                14,
+                R.color.nav_secondary);
+        summary.setLineSpacing(0.0f, 1.12f);
+        card.addView(summary, matchWrap());
         TextView protocolValue = addDetailRow(card, "Protocol", false);
-        protocolValue.setText("TCP + UDP broadcast");
+        protocolValue.setText("UDP recommended · TCP fallback");
         TextView portValue = addDetailRow(card, "Port", true);
         portValue.setText(String.valueOf(BridgeService.PORT));
-        clientsValue = addDetailRow(card, "TCP clients", false);
-        udpTargetsValue = addDetailRow(card, "UDP networks", false);
-        serverValue = addDetailRow(card, "TCP server", false);
 
         View divider = new View(this);
-        divider.setBackgroundColor(0xffe4e7ec);
+        divider.setBackgroundColor(getColor(R.color.nav_divider));
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
         dividerParams.topMargin = dp(8);
@@ -559,7 +562,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         card.addView(divider, dividerParams);
 
         TextView hint = text(
-                "TCP fallback — enter one of these addresses in Navionics:",
+                "TCP fallback addresses:",
                 14,
                 R.color.nav_secondary);
         card.addView(hint, matchWrap());
@@ -570,7 +573,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         addressesParams.topMargin = dp(6);
         card.addView(addressesContainer, addressesParams);
 
-        Button refresh = smallButton("Refresh Addresses", () -> {
+        Button refresh = smallButton("Refresh addresses", () -> {
             if (binder != null) binder.refreshNetworkAddresses();
         });
         LinearLayout.LayoutParams refreshParams = wrapWrap();
@@ -583,7 +586,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout card = card();
         addCardHeader(card, "Connect in Navionics");
         addInstruction(card, 1, "Turn on this phone's hotspot and connect the iPad to it. Internet is not required.");
-        addInstruction(card, 2, "Tap Start Streaming and allow Precise Location and notifications.");
+        addInstruction(card, 2, "Start streaming and allow Precise Location and notifications.");
         addInstruction(card, 3, "In Navionics: Menu → Connect a Device → Add Device.");
         addInstruction(card, 4, "Choose UDP. Enter host 0.0.0.0 and port " + BridgeService.PORT + ".");
         addInstruction(card, 5, "Save the device. TCP remains available as a fallback using an address above.");
@@ -593,7 +596,16 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private View buildDiagnosticsCard() {
         LinearLayout card = card();
-        addCardHeader(card, "Last NMEA transmission");
+        addCardHeader(card, "Network and NMEA");
+        clientsValue = addDetailRow(card, "TCP clients", false);
+        udpTargetsValue = addDetailRow(card, "UDP networks", false);
+        serverValue = addDetailRow(card, "TCP server", false);
+        TextView lastTransmission = text("Last NMEA transmission", 14, R.color.nav_text);
+        lastTransmission.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        LinearLayout.LayoutParams transmissionParams = matchWrap();
+        transmissionParams.topMargin = dp(14);
+        transmissionParams.bottomMargin = dp(7);
+        card.addView(lastTransmission, transmissionParams);
         HorizontalScrollView horizontalScroll = new HorizontalScrollView(this);
         horizontalScroll.setFillViewport(true);
         sentencesValue = text("Sentences appear here after the first GPS fix.", 12, R.color.nav_secondary);
@@ -607,13 +619,20 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private void render(BridgeState state) {
         boolean armedScreen = state.anchorAlarmArmed;
-        pageTitle.setText(armedScreen ? "Anchor watch" : "GPS → Navionics");
-        normalDashboard.setVisibility(armedScreen ? View.GONE : View.VISIBLE);
-        armedAnchorDashboard.setVisibility(armedScreen ? View.VISIBLE : View.GONE);
+        pageTitle.setText("GPS Bridge");
+        disarmedAnchorDashboard.setVisibility(armedScreen ? View.GONE : View.VISIBLE);
+        armedAnchorContainer.setVisibility(armedScreen ? View.VISIBLE : View.GONE);
+        if (armedScreen && !lastRenderedAnchorArmed) {
+            selectSection(SECTION_ANCHOR, true);
+        }
+        if (state.anchorAlarmTriggered && !lastRenderedAnchorTriggered) {
+            selectSection(SECTION_ANCHOR, true);
+        }
         if (armedScreen != lastRenderedAnchorArmed) {
             lastRenderedAnchorArmed = armedScreen;
             pageScrollView.post(() -> pageScrollView.scrollTo(0, 0));
         }
+        lastRenderedAnchorTriggered = state.anchorAlarmTriggered;
 
         boolean fineLocation = hasFineLocationPermission();
         boolean active = state.streaming;
@@ -621,9 +640,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         setCircleColor(statusDot, statusColor(state, fineLocation));
         statusDot.setContentDescription(statusTitle.getText());
 
-        streamButton.setText(active ? "■  Stop Streaming" : "●  Start Streaming");
-        streamButton.setBackgroundTintList(ColorStateList.valueOf(
-                getColor(active ? R.color.nav_error : R.color.nav_blue)));
+        streamButton.setText(active ? "■  Stop streaming" : "●  Start streaming");
+        styleActionButton(streamButton, active ? R.color.nav_error : R.color.nav_blue);
         renderAnchorAlarm(state);
         renderArmedAnchorDashboard(state);
         renderShoreMonitorStatus(state);
@@ -632,6 +650,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         errorText.setText(visibleError == null ? "" : visibleError);
         errorText.setVisibility(visibleError == null ? View.GONE : View.VISIBLE);
         settingsButton.setVisibility(fineLocation ? View.GONE : View.VISIBLE);
+        bridgeGpsMetric.setText(state.hasLocation && state.accuracyMeters >= 0.0
+                ? String.format(Locale.US, "±%.0f m", state.accuracyMeters) : "Waiting");
+        bridgeClientMetric.setText(state.clientCount == 1
+                ? "1 client" : state.clientCount + " clients");
+        updateSectionButtons(state);
 
         permissionValue.setText(permissionDescription());
         if (state.hasLocation) {
@@ -675,12 +698,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private void renderAnchorAlarm(BridgeState state) {
         selectedAnchorMode = state.anchorMode;
-        if (!anchorRadiusTracking) selectedAnchorRadiusMeters = state.anchorRadiusMeters;
-        renderingAnchorControls = true;
-        shorelinedModeButton.setChecked(state.anchorMode == AnchorAlarm.Mode.SHORELINED);
-        freeSwingingModeButton.setChecked(state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING);
-        if (!anchorRadiusTracking) updateRadiusSlider();
-        renderingAnchorControls = false;
+        selectedAnchorRadiusMeters = state.anchorRadiusMeters;
+        updateRadiusControls();
+        updateModeButtons();
 
         boolean armed = state.anchorAlarmArmed;
         boolean triggered = state.anchorAlarmTriggered;
@@ -715,41 +735,29 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
         shorelinedModeButton.setEnabled(!armed);
         freeSwingingModeButton.setEnabled(!armed);
-        anchorRadiusSlider.setEnabled(!armed);
         anchorRadiusMinusButton.setEnabled(!armed);
         anchorRadiusPlusButton.setEnabled(!armed);
-        if (state.hasAnchorReference) {
-            anchorReferenceValue.setText(AnchorAlarm.coordinate(
-                    state.anchorReferenceLatitude, state.anchorReferenceLongitude));
-        } else {
-            anchorReferenceValue.setText("Not set");
-        }
-        if (Double.isFinite(state.anchorDistanceMeters)) {
-            anchorDistanceValue.setText(String.format(Locale.US, "%.1f m / %.0f m limit",
-                    state.anchorDistanceMeters, state.anchorRadiusMeters));
-        } else {
-            anchorDistanceValue.setText("—");
-        }
+        freeSwingingWorkflow.setVisibility(
+                state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING ? View.VISIBLE : View.GONE);
+        anchorStepOneDetail.setText(state.hasAnchorReference
+                ? "Position recorded. Update it below if needed."
+                : "Do this while the boat is over the anchor.");
 
         if (armed) {
-            anchorPrimaryButton.setText("■  Disarm anchor alarm");
-            anchorPrimaryButton.setBackgroundTintList(
-                    ColorStateList.valueOf(getColor(R.color.nav_error)));
+            anchorPrimaryButton.setText("■  Disarm anchor watch");
+            styleActionButton(anchorPrimaryButton, R.color.nav_error);
         } else if (state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !state.hasAnchorReference) {
             anchorPrimaryButton.setText("⚓  Drop anchor here");
-            anchorPrimaryButton.setBackgroundTintList(
-                    ColorStateList.valueOf(getColor(R.color.nav_blue)));
+            styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         } else {
             anchorPrimaryButton.setText("●  Arm anchor alarm");
-            anchorPrimaryButton.setBackgroundTintList(
-                    ColorStateList.valueOf(getColor(R.color.nav_blue)));
+            styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         }
         markAnchorButton.setVisibility(
                 !armed && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
-                        ? View.VISIBLE : View.GONE);
-        markAnchorButton.setText(state.hasAnchorReference
-                ? "Update anchor position here" : "Drop anchor here");
+                        && state.hasAnchorReference ? View.VISIBLE : View.GONE);
+        markAnchorButton.setText("Update anchor position here");
         silenceAnchorButton.setVisibility(triggered ? View.VISIBLE : View.GONE);
 
         String message = state.anchorAlertReason != null
@@ -762,13 +770,13 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         String value;
         int color;
         if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
-            value = "Connected • alarm ready";
+            value = "Connected · Sound ready";
             color = R.color.nav_success;
         } else if (state.shoreMonitorConnected) {
-            value = "Connected • shore sound setup incomplete";
+            value = "Connected · Setup needed";
             color = R.color.nav_warning;
         } else {
-            value = "Not connected";
+            value = "Not paired";
             color = R.color.nav_secondary;
         }
         if (normalShoreMonitorValue != null) {
@@ -797,6 +805,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 ? String.format(Locale.US, "%.1f m", state.anchorDistanceMeters) : "—");
         armedAnchorDistance.setTextColor(getColor(
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
+        armedAnchorDistanceLabel.setText(String.format(
+                Locale.US, "distance from reference • %.0f m limit", state.anchorRadiusMeters));
         boolean radiusAdjustable = state.anchorAlarmArmed
                 && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING;
         armedSwingRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
@@ -859,8 +869,15 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private void toggleAnchorAlarm() {
         anchorActionMessage = null;
         if (latestState.anchorAlarmArmed) {
-            pendingPermissionAction = PENDING_NONE;
-            sendServiceAction(BridgeService.ACTION_DISARM_ANCHOR);
+            new AlertDialog.Builder(this)
+                    .setTitle("Disarm anchor watch?")
+                    .setMessage("The boat will no longer be monitored for drift or GPS loss.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Disarm", (dialog, which) -> {
+                        pendingPermissionAction = PENDING_NONE;
+                        sendServiceAction(BridgeService.ACTION_DISARM_ANCHOR);
+                    })
+                    .show();
             return;
         }
         if (selectedAnchorMode == AnchorAlarm.Mode.FREE_SWINGING
@@ -1103,14 +1120,241 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         card.addView(row, rowParams);
     }
 
+    private View buildSectionSwitcher() {
+        LinearLayout switcher = horizontal();
+        switcher.setPadding(dp(4), dp(4), dp(4), dp(4));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_surface_muted));
+        background.setCornerRadius(dp(14));
+        switcher.setBackground(background);
+
+        bridgeSectionButton = sectionButton("Bridge", SECTION_BRIDGE);
+        anchorSectionButton = sectionButton("Anchor", SECTION_ANCHOR);
+        switcher.addView(bridgeSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        switcher.addView(anchorSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        return switcher;
+    }
+
+    private Button sectionButton(String label, int section) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextSize(14);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setMinWidth(0);
+        button.setPadding(dp(8), 0, dp(8), 0);
+        button.setElevation(0);
+        button.setStateListAnimator(null);
+        button.setOnClickListener(view -> selectSection(section, true));
+        return button;
+    }
+
+    private void selectSection(int section, boolean scrollToTop) {
+        selectedSection = section;
+        if (normalDashboard != null) {
+            normalDashboard.setVisibility(section == SECTION_BRIDGE ? View.VISIBLE : View.GONE);
+        }
+        if (anchorDashboard != null) {
+            anchorDashboard.setVisibility(section == SECTION_ANCHOR ? View.VISIBLE : View.GONE);
+        }
+        styleSectionButton(bridgeSectionButton, section == SECTION_BRIDGE);
+        styleSectionButton(anchorSectionButton, section == SECTION_ANCHOR);
+        if (scrollToTop && pageScrollView != null) {
+            pageScrollView.post(() -> pageScrollView.smoothScrollTo(0, 0));
+        }
+    }
+
+    private void styleSectionButton(Button button, boolean selected) {
+        if (button == null) return;
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(selected ? R.color.nav_blue : android.R.color.transparent));
+        background.setCornerRadius(dp(11));
+        button.setBackground(background);
+        button.setTextColor(getColor(selected ? android.R.color.white : R.color.nav_text));
+    }
+
+    private void updateSectionButtons(BridgeState state) {
+        bridgeSectionButton.setText(state.streaming ? "Bridge  •" : "Bridge");
+        anchorSectionButton.setText(state.anchorAlarmArmed ? "Anchor  •" : "Anchor");
+        bridgeSectionButton.setContentDescription(
+                state.streaming ? "Bridge, active" : "Bridge, inactive");
+        anchorSectionButton.setContentDescription(
+                state.anchorAlarmArmed ? "Anchor, armed" : "Anchor, disarmed");
+    }
+
+    private View buildDisclosureSection(String title, LinearLayout body) {
+        LinearLayout section = vertical();
+        Button header = new Button(this);
+        header.setAllCaps(false);
+        header.setText(title + "  ›");
+        header.setTextSize(16);
+        header.setTextColor(getColor(R.color.nav_text));
+        header.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), 0, dp(16), 0);
+        header.setMinHeight(dp(54));
+        header.setElevation(dp(1));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_card));
+        background.setCornerRadius(dp(16));
+        header.setBackground(background);
+        body.setVisibility(View.GONE);
+        header.setOnClickListener(view -> {
+            boolean expanded = body.getVisibility() == View.VISIBLE;
+            body.setVisibility(expanded ? View.GONE : View.VISIBLE);
+            header.setText(title + (expanded ? "  ›" : "  ⌄"));
+        });
+        section.addView(header, matchWrap());
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.topMargin = dp(10);
+        section.addView(body, bodyParams);
+        return section;
+    }
+
+    private View buildAnchorDetailsCard() {
+        LinearLayout card = card();
+        TextView behavior = text(
+                "A drift must remain outside the radius for 5 seconds. GPS loss alerts after "
+                        + "30 seconds. The alarm continues until silenced or the watch is disarmed.",
+                14,
+                R.color.nav_secondary);
+        behavior.setLineSpacing(0.0f, 1.12f);
+        card.addView(behavior, matchWrap());
+        return card;
+    }
+
+    private TextView safetyNote() {
+        TextView safety = text(
+                "⚠  Test the alarm and phone volume before relying on it. Keep a physical "
+                        + "anchor watch and an independent navigation backup.",
+                13,
+                R.color.nav_secondary);
+        safety.setLineSpacing(0.0f, 1.18f);
+        safety.setPadding(dp(5), dp(2), dp(5), dp(12));
+        return safety;
+    }
+
+    private TextView addMetric(LinearLayout parent, String label, String initialValue) {
+        LinearLayout metric = vertical();
+        metric.setGravity(Gravity.CENTER);
+        TextView value = text(initialValue, 14, R.color.nav_text);
+        value.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        value.setGravity(Gravity.CENTER);
+        value.setSingleLine(true);
+        TextView caption = text(label, 12, R.color.nav_secondary);
+        caption.setGravity(Gravity.CENTER);
+        metric.addView(value, matchWrap());
+        metric.addView(caption, matchWrap());
+        parent.addView(metric, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        return value;
+    }
+
+    private void addMetricDivider(LinearLayout parent) {
+        View divider = new View(this);
+        divider.setBackgroundColor(getColor(R.color.nav_divider));
+        parent.addView(divider, new LinearLayout.LayoutParams(dp(1), dp(34)));
+    }
+
+    private void addLegendItem(LinearLayout parent, int colorResource, String label) {
+        LinearLayout item = horizontal();
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        View marker = new View(this);
+        setCircleColor(marker, getColor(colorResource));
+        LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(dp(8), dp(8));
+        markerParams.setMarginEnd(dp(5));
+        item.addView(marker, markerParams);
+        item.addView(text(label, 12, R.color.nav_secondary), wrapWrap());
+        LinearLayout.LayoutParams itemParams = wrapWrap();
+        itemParams.setMarginEnd(dp(14));
+        parent.addView(item, itemParams);
+    }
+
+    private Button modeButton(String title, AnchorAlarm.Mode mode) {
+        Button button = new Button(this);
+        button.setText(title);
+        button.setTextSize(14);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setMinWidth(0);
+        button.setPadding(dp(4), 0, dp(4), 0);
+        button.setElevation(0);
+        button.setStateListAnimator(null);
+        button.setOnClickListener(view -> chooseAnchorMode(mode));
+        return button;
+    }
+
+    private void chooseAnchorMode(AnchorAlarm.Mode mode) {
+        if (mode == selectedAnchorMode || latestState.anchorAlarmArmed) return;
+        selectedAnchorMode = mode;
+        selectedAnchorRadiusMeters = mode.defaultRadiusMeters;
+        anchorActionMessage = null;
+        updateRadiusControls();
+        updateModeButtons();
+        if (binder != null) {
+            binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
+        }
+        renderAnchorAlarm(latestState);
+    }
+
+    private void updateModeButtons() {
+        styleModeButton(
+                shorelinedModeButton,
+                selectedAnchorMode == AnchorAlarm.Mode.SHORELINED);
+        styleModeButton(
+                freeSwingingModeButton,
+                selectedAnchorMode == AnchorAlarm.Mode.FREE_SWINGING);
+    }
+
+    private void styleModeButton(Button button, boolean selected) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(selected ? R.color.nav_blue : android.R.color.transparent));
+        background.setCornerRadius(dp(10));
+        button.setBackground(background);
+        button.setTextColor(getColor(selected ? android.R.color.white : R.color.nav_text));
+    }
+
+    private TextView addWorkflowStep(
+            LinearLayout parent,
+            String number,
+            String title,
+            String detail) {
+        LinearLayout row = horizontal();
+        row.setGravity(Gravity.TOP);
+        TextView badge = text(number, 12, android.R.color.white);
+        badge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        badge.setGravity(Gravity.CENTER);
+        GradientDrawable badgeBackground = new GradientDrawable();
+        badgeBackground.setShape(GradientDrawable.OVAL);
+        badgeBackground.setColor(getColor(R.color.nav_blue));
+        badge.setBackground(badgeBackground);
+        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+        badgeParams.setMarginEnd(dp(10));
+        row.addView(badge, badgeParams);
+
+        LinearLayout copy = vertical();
+        TextView titleView = text(title, 14, R.color.nav_text);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView detailView = text(detail, 12, R.color.nav_secondary);
+        detailView.setLineSpacing(0.0f, 1.1f);
+        copy.addView(titleView, matchWrap());
+        copy.addView(detailView, matchWrap());
+        row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        LinearLayout.LayoutParams rowParams = matchWrap();
+        rowParams.bottomMargin = dp(10);
+        parent.addView(row, rowParams);
+        return detailView;
+    }
+
     private Button smallButton(String label, Runnable action) {
         Button button = new Button(this);
         button.setText(label);
         button.setTextSize(13);
         button.setAllCaps(false);
         button.setTextColor(getColor(R.color.nav_blue));
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
-        button.setMinHeight(dp(36));
+        button.setBackground(new GradientDrawable());
+        button.setElevation(0);
+        button.setStateListAnimator(null);
+        button.setMinHeight(dp(44));
         button.setMinWidth(0);
         button.setPadding(0, 0, dp(10), 0);
         button.setOnClickListener(view -> action.run());
@@ -1125,8 +1369,15 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         button.setTextColor(Color.WHITE);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setMinHeight(dp(52));
-        button.setBackgroundTintList(ColorStateList.valueOf(getColor(colorResource)));
+        styleActionButton(button, colorResource);
         return button;
+    }
+
+    private void styleActionButton(Button button, int colorResource) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(colorResource));
+        background.setCornerRadius(dp(26));
+        button.setBackground(background);
     }
 
     private Button radiusStepButton(String label, double direction) {
@@ -1145,7 +1396,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         selectedAnchorRadiusMeters = selectedAnchorMode.adjustedRadius(
                 selectedAnchorRadiusMeters
                         + direction * selectedAnchorMode.radiusStepMeters);
-        updateRadiusSlider();
+        updateRadiusControls();
         if (armedAnchorRadiusValue != null) {
             armedAnchorRadiusValue.setText(String.format(
                     Locale.US, "%.0f m", selectedAnchorRadiusMeters));
@@ -1155,11 +1406,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         }
     }
 
-    private void updateRadiusSlider() {
-        if (anchorRadiusSlider == null) return;
-        anchorRadiusSlider.setMax(radiusMaximumProgress(selectedAnchorMode));
-        anchorRadiusSlider.setProgress(radiusProgress(
-                selectedAnchorMode, selectedAnchorRadiusMeters));
+    private void updateRadiusControls() {
         anchorRadiusValue.setText(String.format(
                 Locale.US, "%.0f m", selectedAnchorRadiusMeters));
         anchorRadiusHint.setText(String.format(
@@ -1167,22 +1414,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 selectedAnchorMode.minimumRadiusMeters,
                 selectedAnchorMode.maximumRadiusMeters,
                 selectedAnchorMode.radiusStepMeters));
-    }
-
-    private static int radiusMaximumProgress(AnchorAlarm.Mode mode) {
-        return (int) Math.round(
-                (mode.maximumRadiusMeters - mode.minimumRadiusMeters) / mode.radiusStepMeters);
-    }
-
-    private static int radiusProgress(AnchorAlarm.Mode mode, double radiusMeters) {
-        int progress = (int) Math.round(
-                (radiusMeters - mode.minimumRadiusMeters) / mode.radiusStepMeters);
-        return Math.max(0, Math.min(radiusMaximumProgress(mode), progress));
-    }
-
-    private static double radiusFromProgress(AnchorAlarm.Mode mode, int progress) {
-        int safeProgress = Math.max(0, Math.min(radiusMaximumProgress(mode), progress));
-        return mode.minimumRadiusMeters + safeProgress * mode.radiusStepMeters;
+        anchorRadiusMinusButton.setEnabled(
+                selectedAnchorRadiusMeters > selectedAnchorMode.minimumRadiusMeters);
+        anchorRadiusPlusButton.setEnabled(
+                selectedAnchorRadiusMeters < selectedAnchorMode.maximumRadiusMeters);
     }
 
     private TextView text(String value, float sizeSp, int colorResource) {
@@ -1197,6 +1432,12 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         return row;
+    }
+
+    private LinearLayout vertical() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        return column;
     }
 
     private LinearLayout.LayoutParams cardParams() {

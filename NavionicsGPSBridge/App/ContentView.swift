@@ -1,30 +1,39 @@
 import SwiftUI
 
 struct ContentView: View {
+    private enum DashboardSection: String, CaseIterable, Identifiable {
+        case bridge = "Bridge"
+        case anchor = "Anchor"
+
+        var id: String { rawValue }
+    }
+
     @StateObject private var controller = BridgeController()
+    @State private var selectedSection = DashboardSection.bridge
     @State private var showingAnchorPairing = false
     @State private var showingDegradedArmWarning = false
+    @State private var showingDisarmConfirmation = false
+    @State private var showingBridgeSetup = false
+    @State private var showingBridgeDetails = false
+    @State private var showingAnchorDetails = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    if controller.anchorAlarmArmed {
-                        armedAnchorDashboard
+                    sectionSwitcher
+
+                    if selectedSection == .bridge {
+                        bridgeDashboard
                     } else {
-                        statusCard
-                        anchorAlarmCard
-                        anchorPairingCard
-                        gpsCard
-                        networkCard
-                        instructionsCard
-                        diagnosticsCard
+                        anchorDashboard
                     }
-                    safetyNote
                 }
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
                 .padding()
             }
-            .navigationTitle(controller.anchorAlarmArmed ? "Anchor watch" : "GPS → Navionics")
+            .navigationTitle("GPS Bridge")
             .background(Color(uiColor: .systemGroupedBackground))
             .sheet(isPresented: $showingAnchorPairing) {
                 AnchorPairingView(
@@ -42,17 +51,297 @@ struct ContentView: View {
             } message: {
                 Text("You can arm in degraded mode, but the shore phone may not receive or sound alarms. Pair it and complete its alarm setup when possible.")
             }
+            .alert("Disarm anchor watch?", isPresented: $showingDisarmConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Disarm", role: .destructive, action: controller.disarmAnchorAlarm)
+            } message: {
+                Text("The boat will no longer be monitored for drift or GPS loss.")
+            }
+            .onAppear {
+                if controller.anchorAlarmArmed {
+                    selectedSection = .anchor
+                }
+            }
+            .onChange(of: controller.anchorAlarmTriggered) { _, triggered in
+                if triggered {
+                    selectedSection = .anchor
+                }
+            }
         }
+    }
+
+    private var sectionSwitcher: some View {
+        HStack(spacing: 6) {
+            sectionButton(.bridge, active: controller.isStreaming)
+            sectionButton(.anchor, active: controller.anchorAlarmArmed)
+        }
+        .padding(4)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func sectionButton(
+        _ section: DashboardSection,
+        active: Bool
+    ) -> some View {
+        Button {
+            withAnimation(.snappy) {
+                selectedSection = section
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(section.rawValue)
+                    .fontWeight(.semibold)
+                if active {
+                    Circle()
+                        .fill(selectedSection == section ? Color.white : Color.green)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .foregroundStyle(selectedSection == section ? Color.white : Color.primary)
+            .background(selectedSection == section ? Color.accentColor : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(active ? "Active" : "Inactive")
+    }
+
+    private var bridgeDashboard: some View {
+        VStack(spacing: 16) {
+            bridgeStatusCard
+            connectionCard
+            bridgeSetupCard
+            bridgeDetailsCard
+            safetyNote
+        }
+    }
+
+    private var bridgeStatusCard: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 12, height: 12)
+                    .accessibilityHidden(true)
+                Text(controller.statusTitle)
+                    .font(.title3.bold())
+                Spacer()
+            }
+
+            HStack(spacing: 0) {
+                metric("GPS", controller.accuracyDescription)
+                Divider().frame(height: 34)
+                metric("Navionics", controller.connectedClientCount == 1
+                    ? "1 client" : "\(controller.connectedClientCount) clients")
+                Divider().frame(height: 34)
+                metric("Port", String(controller.port), monospaced: true)
+            }
+
+            Button(action: controller.toggleStreaming) {
+                Label(
+                    controller.isStreaming ? "Stop streaming" : "Start streaming",
+                    systemImage: controller.isStreaming ? "stop.fill" : "location.fill"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(controller.isStreaming ? .red : .blue)
+            .controlSize(.large)
+
+            if let error = controller.lastError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if controller.authorizationStatus == .denied
+                    || controller.authorizationStatus == .restricted {
+                    Button("Open Location Settings", action: controller.openSettings)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .cardStyle()
+    }
+
+    private var connectionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Navionics connection", systemImage: "network")
+                .font(.headline)
+            Text("Enter an address below and port " + String(controller.port) + " in Navionics.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            detailRow("Protocol", "TCP")
+            detailRow("Port", String(controller.port), monospaced: true)
+
+            if controller.networkAddresses.isEmpty {
+                Label("No Wi‑Fi address found", systemImage: "wifi.slash")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            } else {
+                ForEach(controller.networkAddresses) { item in
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text(item.interfaceName)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(verbatim: item.address)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.interfaceName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(verbatim: item.address)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+
+            Button("Refresh addresses", action: controller.refreshNetworkAddresses)
+                .font(.subheadline)
+        }
+        .cardStyle()
+    }
+
+    private var bridgeSetupCard: some View {
+        DisclosureGroup(isExpanded: $showingBridgeSetup) {
+            VStack(alignment: .leading, spacing: 10) {
+                instruction(1, "Put the iPhone and iPad on the same Wi‑Fi network.")
+                instruction(2, "Start streaming and allow Precise Location and Local Network access.")
+                instruction(3, "In Navionics, open Menu → Connect a Device → Add Device.")
+                instruction(4, "Choose TCP, then enter an address above and port \(controller.port).")
+                instruction(5, "Keep the iPhone powered during navigation.")
+            }
+            .padding(.top, 12)
+        } label: {
+            Label("Setup in Navionics", systemImage: "list.number")
+                .font(.headline)
+        }
+        .cardStyle()
+    }
+
+    private var bridgeDetailsCard: some View {
+        DisclosureGroup(isExpanded: $showingBridgeDetails) {
+            VStack(alignment: .leading, spacing: 11) {
+                Divider()
+                detailRow("Permission", controller.authorizationDescription)
+                detailRow("Position", controller.coordinateDescription, monospaced: true)
+                detailRow("Accuracy", controller.accuracyDescription)
+                detailRow("Fix age", controller.fixAgeDescription)
+                detailRow("Speed", controller.speedDescription)
+                detailRow("Course over ground", controller.courseDescription)
+                detailRow("Server", controller.listenerDescription)
+
+                Divider()
+                Text("Last NMEA transmission")
+                    .font(.subheadline.bold())
+                if controller.lastSentences.isEmpty {
+                    Text("Sentences appear here after the first GPS fix.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ScrollView(.horizontal) {
+                        Text(controller.lastSentences)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("GPS and diagnostics", systemImage: "waveform.path.ecg")
+                .font(.headline)
+        }
+        .cardStyle()
+    }
+
+    private var anchorDashboard: some View {
+        VStack(spacing: 16) {
+            if controller.anchorAlarmArmed {
+                armedAnchorDashboard
+            } else {
+                anchorSetupCard
+            }
+            shoreMonitorCard
+            anchorDetailsCard
+            safetyNote
+        }
+    }
+
+    private var anchorSetupCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            statusHeader(controller.anchorStatusTitle, color: anchorStatusColor)
+
+            Text(controller.anchorMode.setupDescription)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker(
+                "Anchor mode",
+                selection: Binding(
+                    get: { controller.anchorMode },
+                    set: controller.setAnchorMode
+                )
+            ) {
+                ForEach(AnchorAlarmMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            radiusControl(title: "Alarm radius", adjustableWhileArmed: false)
+
+            if controller.anchorMode == .freeSwinging {
+                Divider()
+                workflowStep(
+                    1,
+                    title: "Mark anchor position",
+                    detail: controller.anchorReferenceCoordinate == nil
+                        ? "Do this while the boat is over the anchor."
+                        : "Position recorded.",
+                    complete: controller.anchorReferenceCoordinate != nil
+                )
+                workflowStep(
+                    2,
+                    title: "Arm after paying out the rode",
+                    detail: "The watch uses the marked point as its centre.",
+                    complete: false
+                )
+            }
+
+            Button(action: handleAnchorPrimaryAction) {
+                Label(controller.anchorPrimaryButtonTitle, systemImage: "anchor")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            if controller.anchorMode == .freeSwinging,
+               controller.anchorReferenceCoordinate != nil {
+                Button("Update anchor position here", action: controller.markAnchorPosition)
+                    .font(.subheadline)
+            }
+
+            if let message = controller.anchorActionMessage {
+                Label(message, systemImage: "info.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .cardStyle()
     }
 
     private var armedAnchorDashboard: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(anchorStatusColor)
-                    .frame(width: 14, height: 14)
-                Text(controller.anchorStatusTitle)
-                    .font(.title3.bold())
+                statusHeader(controller.anchorStatusTitle, color: anchorStatusColor)
                 Spacer()
                 Text(controller.anchorMode.displayName)
                     .font(.caption.bold())
@@ -73,7 +362,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
 
             if controller.anchorMode == .freeSwinging {
-                armedSwingRadiusControls
+                radiusControl(title: "Swing radius", adjustableWhileArmed: true)
             }
 
             AnchorDriftPlot(
@@ -81,7 +370,9 @@ struct ContentView: View {
                 limitMeters: controller.anchorRadiusMeters,
                 alarmTriggered: controller.anchorAlarmTriggered
             )
-            .frame(height: 360)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxHeight: 420)
+            .frame(maxWidth: .infinity)
 
             HStack(spacing: 16) {
                 plotLegend(color: .blue, label: "GPS trail")
@@ -100,35 +391,10 @@ struct ContentView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Label(
-                controller.shoreMonitorConnected
-                    ? (controller.shoreMonitorSoundReady
-                        ? "Shore monitor connected and sound-ready"
-                        : "Shore monitor connected but sound is not ready")
-                    : "Shore monitor disconnected",
-                systemImage: controller.shoreMonitorConnected
-                    ? "antenna.radiowaves.left.and.right"
-                    : "wifi.slash"
-            )
-            .font(.caption.bold())
-            .foregroundStyle(
-                controller.shoreMonitorConnected && controller.shoreMonitorSoundReady
-                    ? Color.green : Color.orange
-            )
-
-            Button {
-                controller.refreshAnchorPairing()
-                showingAnchorPairing = true
-            } label: {
-                Label("Show shore pairing", systemImage: "qrcode")
-            }
-            .font(.subheadline)
-
             if let message = controller.anchorAlertReason {
-                Text(message)
+                Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote.bold())
                     .foregroundStyle(controller.anchorAlarmTriggered ? .red : .orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if controller.anchorAlarmTriggered {
@@ -141,43 +407,41 @@ struct ContentView: View {
                 .controlSize(.large)
             }
 
-            Button(action: controller.disarmAnchorAlarm) {
-                Label("Disarm anchor alarm", systemImage: "stop.fill")
+            Button {
+                showingDisarmConfirmation = true
+            } label: {
+                Label("Disarm anchor watch", systemImage: "stop.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
             .controlSize(.large)
 
-            Text("The plot is north-up and automatically zooms to keep the complete recent trail and alarm boundary visible.")
+            Text("North-up • focused on the alarm boundary, current position, and recent trail. Isolated older GPS outliers do not shrink the plot.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .cardStyle()
     }
 
-    private var armedSwingRadiusControls: some View {
+    private func radiusControl(title: String, adjustableWhileArmed: Bool) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 12) {
-                Text("Swing radius")
+                Text(title)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     controller.setAnchorRadius(
-                        controller.anchorRadiusMeters
-                            - controller.anchorMode.radiusStepMeters
+                        controller.anchorRadiusMeters - controller.anchorMode.radiusStepMeters
                     )
                 } label: {
                     Image(systemName: "minus")
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.bordered)
-                .disabled(
-                    controller.anchorRadiusMeters
-                        <= controller.anchorMode.minimumRadiusMeters
-                )
-                .accessibilityLabel("Decrease swing radius")
+                .disabled(controller.anchorRadiusMeters <= controller.anchorMode.minimumRadiusMeters)
+                .accessibilityLabel("Decrease \(title.lowercased())")
 
                 Text(String(format: "%.0f m", controller.anchorRadiusMeters))
                     .font(.headline.monospacedDigit())
@@ -186,168 +450,58 @@ struct ContentView: View {
 
                 Button {
                     controller.setAnchorRadius(
-                        controller.anchorRadiusMeters
-                            + controller.anchorMode.radiusStepMeters
+                        controller.anchorRadiusMeters + controller.anchorMode.radiusStepMeters
                     )
                 } label: {
                     Image(systemName: "plus")
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.bordered)
-                .disabled(
-                    controller.anchorRadiusMeters
-                        >= controller.anchorMode.maximumRadiusMeters
-                )
-                .accessibilityLabel("Increase swing radius")
+                .disabled(controller.anchorRadiusMeters >= controller.anchorMode.maximumRadiusMeters)
+                .accessibilityLabel("Increase \(title.lowercased())")
             }
 
-            Text(String(
-                format: "Adjustable while anchored • %.0f m steps",
-                controller.anchorMode.radiusStepMeters
-            ))
+            Text(radiusHint(adjustableWhileArmed: adjustableWhileArmed))
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(Color(uiColor: .tertiarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private var anchorAlarmCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(anchorStatusColor)
-                    .frame(width: 12, height: 12)
-                Text(controller.anchorStatusTitle)
-                    .font(.headline)
-                Spacer()
-            }
-
-            Text(controller.anchorMode.setupDescription)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Picker(
-                "Anchor mode",
-                selection: Binding(
-                    get: { controller.anchorMode },
-                    set: controller.setAnchorMode
-                )
-            ) {
-                ForEach(AnchorAlarmMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(controller.anchorAlarmArmed)
-
-            Stepper(
-                value: Binding(
-                    get: { controller.anchorRadiusMeters },
-                    set: controller.setAnchorRadius
-                ),
-                in: controller.anchorMode.minimumRadiusMeters...controller.anchorMode.maximumRadiusMeters,
-                step: controller.anchorMode.radiusStepMeters
-            ) {
-                HStack {
-                    Text("Alarm radius")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(String(format: "%.0f m", controller.anchorRadiusMeters))
-                        .fontWeight(.semibold)
-                }
-                .font(.subheadline)
-            }
-            .disabled(controller.anchorAlarmArmed)
-
-            Slider(
-                value: Binding(
-                    get: { controller.anchorRadiusMeters },
-                    set: controller.setAnchorRadius
-                ),
-                in: controller.anchorMode.minimumRadiusMeters...controller.anchorMode.maximumRadiusMeters,
-                step: controller.anchorMode.radiusStepMeters
+    private func radiusHint(adjustableWhileArmed: Bool) -> String {
+        if adjustableWhileArmed {
+            return String(
+                format: "Adjustable while anchored • %.0f m steps",
+                controller.anchorMode.radiusStepMeters
             )
-            .disabled(controller.anchorAlarmArmed)
-            .accessibilityLabel("Anchor alarm radius")
-            .accessibilityValue(String(format: "%.0f metres", controller.anchorRadiusMeters))
-
-            Text(
-                String(
-                    format: "%.0f–%.0f m range • %.0f m steps",
-                    controller.anchorMode.minimumRadiusMeters,
-                    controller.anchorMode.maximumRadiusMeters,
-                    controller.anchorMode.radiusStepMeters
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            detailRow(
-                "Reference position",
-                controller.anchorReferenceDescription,
-                monospaced: true
-            )
-            detailRow("Distance from reference", controller.anchorDistanceDescription)
-
-            Button(action: handleAnchorPrimaryAction) {
-                Label(
-                    controller.anchorPrimaryButtonTitle,
-                    systemImage: controller.anchorAlarmArmed ? "stop.fill" : "anchor"
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(controller.anchorAlarmArmed ? .red : .blue)
-            .controlSize(.large)
-
-            if controller.anchorMode == .freeSwinging,
-               !controller.anchorAlarmArmed,
-               controller.anchorReferenceCoordinate != nil {
-                Button("Update anchor position here", action: controller.markAnchorPosition)
-                    .font(.subheadline)
-            }
-
-            if controller.anchorAlarmTriggered {
-                Button(action: controller.silenceAnchorAlarm) {
-                    Label("Silence alarm", systemImage: "speaker.slash.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .controlSize(.large)
-            }
-
-            if let message = controller.anchorAlertReason ?? controller.anchorActionMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(controller.anchorAlarmTriggered ? .red : .orange)
-            }
-
-            Text("A drift must remain outside the radius for 5 seconds. GPS loss alerts after 30 seconds; while locked, the alarm notification repeats every minute until silenced.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .cardStyle()
+        return String(
+            format: "%.0f–%.0f m range • %.0f m steps",
+            controller.anchorMode.minimumRadiusMeters,
+            controller.anchorMode.maximumRadiusMeters,
+            controller.anchorMode.radiusStepMeters
+        )
     }
 
-    private var anchorPairingCard: some View {
+    private var shoreMonitorCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(controller.shoreMonitorConnected ? Color.green : Color.blue)
-                    .frame(width: 12, height: 12)
+                Image(systemName: shoreMonitorSymbol)
+                    .foregroundStyle(shoreMonitorColor)
+                    .accessibilityHidden(true)
                 Text("Shore monitor")
                     .font(.headline)
                 Spacer()
-                Text(controller.shoreMonitorConnected ? "Connected" : "Not connected")
+                Text(shoreMonitorStatus)
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(shoreMonitorColor)
+                    .multilineTextAlignment(.trailing)
             }
 
-            Text("Pair one Android phone to receive heartbeat, alarm events, and plot history over Wi‑Fi or Tailscale.")
+            Text("Pair one Android phone for remote alarm and connection-loss alerts.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -355,151 +509,43 @@ struct ContentView: View {
                 controller.refreshAnchorPairing()
                 showingAnchorPairing = true
             } label: {
-                Label("Pair Android shore monitor", systemImage: "qrcode")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .cardStyle()
-    }
-
-    private func handleAnchorPrimaryAction() {
-        let actionWillArm = !controller.anchorAlarmArmed
-            && (controller.anchorMode == .shorelined
-                || controller.anchorReferenceCoordinate != nil)
-        if actionWillArm
-            && (!controller.shoreMonitorConnected || !controller.shoreMonitorSoundReady) {
-            showingDegradedArmWarning = true
-        } else {
-            controller.toggleAnchorAlarm()
-        }
-    }
-
-    private var statusCard: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 12, height: 12)
-                Text(controller.statusTitle)
-                    .font(.headline)
-                Spacer()
-            }
-
-            Button(action: controller.toggleStreaming) {
                 Label(
-                    controller.isStreaming ? "Stop Streaming" : "Start Streaming",
-                    systemImage: controller.isStreaming ? "stop.fill" : "location.fill"
+                    controller.shoreMonitorConnected ? "View pairing code" : "Pair shore monitor",
+                    systemImage: "qrcode"
                 )
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(controller.isStreaming ? .red : .blue)
-            .controlSize(.large)
+            .font(.subheadline)
+        }
+        .cardStyle()
+    }
 
-            if let error = controller.lastError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if controller.authorizationStatus == .denied || controller.authorizationStatus == .restricted {
-                    Button("Open Location Settings", action: controller.openSettings)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    private var anchorDetailsCard: some View {
+        DisclosureGroup(isExpanded: $showingAnchorDetails) {
+            VStack(alignment: .leading, spacing: 11) {
+                Divider()
+                if controller.anchorMode == .freeSwinging {
+                    detailRow(
+                        "Reference position",
+                        controller.anchorReferenceDescription,
+                        monospaced: true
+                    )
+                    detailRow("Distance from reference", controller.anchorDistanceDescription)
                 }
-            }
-        }
-        .cardStyle()
-    }
-
-    private var gpsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("GPS fix", systemImage: "location.circle")
-                .font(.headline)
-            detailRow("Permission", controller.authorizationDescription)
-            detailRow("Position", controller.coordinateDescription, monospaced: true)
-            detailRow("Accuracy", controller.accuracyDescription)
-            detailRow("Fix age", controller.fixAgeDescription)
-            detailRow("Speed", controller.speedDescription)
-            detailRow("Course over ground", controller.courseDescription)
-        }
-        .cardStyle()
-    }
-
-    private var networkCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Navionics connection", systemImage: "network")
-                .font(.headline)
-            detailRow("Protocol", "TCP")
-            detailRow("Port", String(controller.port), monospaced: true)
-            detailRow("Clients", String(controller.connectedClientCount))
-            detailRow("Server", controller.listenerDescription)
-
-            Divider()
-
-            Text("Enter one of these addresses in Navionics:")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if controller.networkAddresses.isEmpty {
-                Text("No Wi‑Fi or hotspot address found")
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-            } else {
-                ForEach(controller.networkAddresses) { item in
-                    HStack {
-                        Text(item.interfaceName)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(item.address)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-
-            Button("Refresh Addresses", action: controller.refreshNetworkAddresses)
-                .font(.subheadline)
-        }
-        .cardStyle()
-    }
-
-    private var instructionsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Connect in Navionics", systemImage: "list.number")
-                .font(.headline)
-            instruction(1, "Put the iPhone and iPad on the same Wi‑Fi network.")
-            instruction(2, "Tap Start Streaming and allow Precise Location and Local Network access.")
-            instruction(3, "In Navionics: Menu → Connect a Device → Add Device.")
-            instruction(4, "Choose TCP, then enter the address above and port \(controller.port).")
-            instruction(5, "Keep the iPhone powered during navigation.")
-        }
-        .cardStyle()
-    }
-
-    private var diagnosticsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Last NMEA transmission", systemImage: "waveform.path.ecg")
-                .font(.headline)
-
-            if controller.lastSentences.isEmpty {
-                Text("Sentences appear here after the first GPS fix.")
+                Text("A drift must remain outside the radius for 5 seconds. GPS loss alerts after 30 seconds; while locked, the alarm notification repeats every minute until silenced.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal) {
-                    Text(controller.lastSentences)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                }
             }
+            .padding(.top, 8)
+        } label: {
+            Label("Watch details", systemImage: "info.circle")
+                .font(.headline)
         }
         .cardStyle()
     }
 
     private var safetyNote: some View {
         Label {
-            Text("Test the alarm, notification sound, and volume before relying on it. GPS, battery, and iOS settings can fail; keep a physical anchor watch and an independent navigation backup.")
+            Text("Test the alarm and phone volume before relying on it. Keep a physical anchor watch and an independent navigation backup.")
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
@@ -507,6 +553,66 @@ struct ContentView: View {
         .font(.footnote)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 4)
+    }
+
+    private func statusHeader(_ title: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(color)
+                .frame(width: 12, height: 12)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.headline)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func metric(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(monospaced ? .system(.subheadline, design: .monospaced) : .subheadline)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func workflowStep(
+        _ number: Int,
+        title: String,
+        detail: String,
+        complete: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: complete ? "checkmark.circle.fill" : "\(number).circle.fill")
+                .font(.title3)
+                .foregroundStyle(complete ? .green : .blue)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func handleAnchorPrimaryAction() {
+        let actionWillArm = controller.anchorMode == .shorelined
+            || controller.anchorReferenceCoordinate != nil
+        if actionWillArm
+            && (!controller.shoreMonitorConnected || !controller.shoreMonitorSoundReady) {
+            showingDegradedArmWarning = true
+        } else {
+            controller.toggleAnchorAlarm()
+        }
     }
 
     private func instruction(_ number: Int, _ text: String) -> some View {
@@ -523,14 +629,24 @@ struct ContentView: View {
     }
 
     private func detailRow(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(monospaced ? .system(.body, design: .monospaced) : .body)
-                .multilineTextAlignment(.trailing)
-                .textSelection(.enabled)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(value)
+                    .font(monospaced ? .system(.body, design: .monospaced) : .body)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(monospaced ? .system(.body, design: .monospaced) : .body)
+                    .textSelection(.enabled)
+            }
         }
         .font(.subheadline)
     }
@@ -561,6 +677,22 @@ struct ContentView: View {
         default: return .secondary
         }
     }
+
+    private var shoreMonitorStatus: String {
+        if !controller.shoreMonitorConnected { return "Not paired" }
+        return controller.shoreMonitorSoundReady ? "Connected · Sound ready" : "Connected · Setup needed"
+    }
+
+    private var shoreMonitorSymbol: String {
+        if !controller.shoreMonitorConnected { return "wifi.slash" }
+        return controller.shoreMonitorSoundReady
+            ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var shoreMonitorColor: Color {
+        if !controller.shoreMonitorConnected { return .secondary }
+        return controller.shoreMonitorSoundReady ? .green : .orange
+    }
 }
 
 private struct AnchorDriftPlot: View {
@@ -573,10 +705,27 @@ private struct AnchorDriftPlot: View {
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let padding = 30.0
             let drawableRadius = max(1, min(size.width, size.height) / 2 - padding)
-            let furthestPoint = points.map {
-                hypot($0.eastMeters, $0.northMeters) + $0.accuracyMeters
-            }.max() ?? 0
-            let extentMeters = max(5, limitMeters * 1.25, furthestPoint * 1.15)
+            let recentExtents = points.suffix(120).map { point in
+                hypot(point.eastMeters, point.northMeters)
+                    + min(max(0, point.accuracyMeters), limitMeters)
+            }.sorted()
+            let representativeExtent: Double
+            if recentExtents.isEmpty {
+                representativeExtent = 0
+            } else {
+                let percentileIndex = Int(Double(recentExtents.count - 1) * 0.95)
+                representativeExtent = recentExtents[percentileIndex]
+            }
+            let currentExtent = points.last.map { point in
+                hypot(point.eastMeters, point.northMeters)
+                    + min(max(0, point.accuracyMeters), limitMeters)
+            } ?? 0
+            let extentMeters = max(
+                5,
+                limitMeters * 1.2,
+                representativeExtent * 1.12,
+                currentExtent * 1.12
+            )
             let pixelsPerMeter = drawableRadius / extentMeters
 
             func plotPoint(east: Double, north: Double) -> CGPoint {
@@ -609,9 +758,19 @@ private struct AnchorDriftPlot: View {
 
             if points.count > 1 {
                 var trail = Path()
-                for (index, point) in points.enumerated() {
+                var segmentStarted = false
+                for point in points {
+                    guard hypot(point.eastMeters, point.northMeters) <= extentMeters * 1.05 else {
+                        segmentStarted = false
+                        continue
+                    }
                     let location = plotPoint(east: point.eastMeters, north: point.northMeters)
-                    index == 0 ? trail.move(to: location) : trail.addLine(to: location)
+                    if segmentStarted {
+                        trail.addLine(to: location)
+                    } else {
+                        trail.move(to: location)
+                        segmentStarted = true
+                    }
                 }
                 context.stroke(
                     trail,
@@ -622,6 +781,9 @@ private struct AnchorDriftPlot: View {
 
             let pointStride = max(1, points.count / 160)
             for (index, point) in points.enumerated() where index.isMultiple(of: pointStride) {
+                guard hypot(point.eastMeters, point.northMeters) <= extentMeters * 1.05 else {
+                    continue
+                }
                 let location = plotPoint(east: point.eastMeters, north: point.northMeters)
                 let rect = CGRect(x: location.x - 1.5, y: location.y - 1.5, width: 3, height: 3)
                 context.fill(Path(ellipseIn: rect), with: .color(.blue.opacity(0.55)))

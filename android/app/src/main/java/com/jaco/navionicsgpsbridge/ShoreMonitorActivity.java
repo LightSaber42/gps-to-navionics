@@ -19,6 +19,7 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -62,6 +63,12 @@ public final class ShoreMonitorActivity extends Activity
     private AnchorPlotView plotView;
     private Button silenceButton;
     private EditText manualPairingField;
+    private LinearLayout alarmCard;
+    private LinearLayout plotCard;
+    private LinearLayout pairingCard;
+    private LinearLayout safetyCard;
+    private Button reconnectButton;
+    private Button stopButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,9 +120,20 @@ public final class ShoreMonitorActivity extends Activity
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(18), dp(24), dp(18), dp(32));
-        scroll.addView(page, new ScrollView.LayoutParams(
+        ScrollView.LayoutParams pageParams = new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
+                ScrollView.LayoutParams.WRAP_CONTENT);
+        pageParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        scroll.addView(page, pageParams);
+        scroll.addOnLayoutChangeListener((view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            ViewGroup.LayoutParams params = page.getLayoutParams();
+            int targetWidth = Math.min(right - left, dp(680));
+            if (params.width != targetWidth) {
+                params.width = targetWidth;
+                page.setLayoutParams(params);
+            }
+        });
 
         TextView title = text("Shore anchor monitor", 28, R.color.nav_text);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -134,7 +152,7 @@ public final class ShoreMonitorActivity extends Activity
         heartbeatValue = detail(statusCard, "Last heartbeat", "—");
         page.addView(statusCard, cardParams());
 
-        LinearLayout alarmCard = card();
+        alarmCard = card();
         TextView alarmHeader = text("Alarm state", 13, R.color.nav_secondary);
         alarmHeader.setAllCaps(true);
         alarmCard.addView(alarmHeader, matchWrap());
@@ -152,7 +170,7 @@ public final class ShoreMonitorActivity extends Activity
         alarmCard.addView(silenceButton, matchWrap());
         page.addView(alarmCard, cardParams());
 
-        LinearLayout plotCard = card();
+        plotCard = card();
         TextView plotHeader = text("Boat position history", 18, R.color.nav_text);
         plotHeader.setTypeface(Typeface.DEFAULT_BOLD);
         plotCard.addView(plotHeader, matchWrap());
@@ -161,16 +179,17 @@ public final class ShoreMonitorActivity extends Activity
         batteryValue = detail(plotCard, "Boat battery", "—");
         plotView = new AnchorPlotView(this);
         GradientDrawable plotBackground = new GradientDrawable();
-        plotBackground.setColor(0xfff8fafc);
+        plotBackground.setColor(getColor(R.color.nav_plot));
         plotBackground.setCornerRadius(dp(14));
         plotView.setBackground(plotBackground);
         LinearLayout.LayoutParams plotParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(330));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
         plotParams.topMargin = dp(14);
         plotCard.addView(plotView, plotParams);
         page.addView(plotCard, cardParams());
 
-        LinearLayout pairingCard = card();
+        pairingCard = card();
         TextView pairingHeader = text("Pair this shore phone", 18, R.color.nav_text);
         pairingHeader.setTypeface(Typeface.DEFAULT_BOLD);
         pairingCard.addView(pairingHeader, matchWrap());
@@ -196,7 +215,7 @@ public final class ShoreMonitorActivity extends Activity
         pairingCard.addView(applyPairing, applyParams);
         page.addView(pairingCard, cardParams());
 
-        LinearLayout safetyCard = card();
+        safetyCard = card();
         TextView safetyHeader = text("Required alarm setup", 18, R.color.nav_text);
         safetyHeader.setTypeface(Typeface.DEFAULT_BOLD);
         safetyCard.addView(safetyHeader, matchWrap());
@@ -221,18 +240,18 @@ public final class ShoreMonitorActivity extends Activity
         safetyCard.addView(batteryButton, batteryParams);
         page.addView(safetyCard, cardParams());
 
-        Button reconnect = button("Reconnect now", R.color.nav_blue);
-        reconnect.setOnClickListener(view -> {
+        reconnectButton = button("Reconnect now", R.color.nav_blue);
+        reconnectButton.setOnClickListener(view -> {
             if (binder != null) binder.reconnectNow();
             ShoreMonitorService.start(this);
         });
-        page.addView(reconnect, matchWrap());
+        page.addView(reconnectButton, matchWrap());
 
-        Button stop = button("Stop monitor and unpair", R.color.nav_error);
+        stopButton = button("Stop monitor and unpair", R.color.nav_error);
         LinearLayout.LayoutParams stopParams = matchWrap();
         stopParams.topMargin = dp(12);
-        page.addView(stop, stopParams);
-        stop.setOnClickListener(view -> new AlertDialog.Builder(this)
+        page.addView(stopButton, stopParams);
+        stopButton.setOnClickListener(view -> new AlertDialog.Builder(this)
                 .setTitle("Stop shore monitor?")
                 .setMessage("This phone will no longer alarm for the boat until it is paired again.")
                 .setNegativeButton("Cancel", null)
@@ -242,10 +261,23 @@ public final class ShoreMonitorActivity extends Activity
                     recreate();
                 })
                 .show());
+        boolean paired = hasStoredPairing();
+        pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
+        alarmCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        plotCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        reconnectButton.setVisibility(paired ? View.VISIBLE : View.GONE);
+        stopButton.setVisibility(paired ? View.VISIBLE : View.GONE);
         return scroll;
     }
 
     private void render(ShoreMonitorState state) {
+        boolean paired = hasStoredPairing();
+        pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
+        alarmCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        plotCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        safetyCard.setVisibility(!state.soundReady ? View.VISIBLE : View.GONE);
+        reconnectButton.setVisibility(paired && !state.connected ? View.VISIBLE : View.GONE);
+        stopButton.setVisibility(paired ? View.VISIBLE : View.GONE);
         statusValue.setText(state.connected ? "Connected" : state.statusMessage);
         statusValue.setTextColor(getColor(state.connected ? R.color.nav_success : R.color.nav_warning));
         readinessValue.setText(state.soundReady

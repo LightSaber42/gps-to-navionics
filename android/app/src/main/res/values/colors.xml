@@ -4,6 +4,10 @@
     <color name="nav_blue_dark">#084DAA</color>
     <color name="nav_background">#F2F4F7</color>
     <color name="nav_card">#FFFFFF</color>
+    <color name="nav_surface_muted">#E4E7EC</color>
+    <color name="nav_divider">#D0D5DD</color>
+    <color name="nav_plot">#F8FAFC</color>
+    <color name="nav_plot_stroke">#24000000</color>
     <color name="nav_text">#17202A</color>
     <color name="nav_secondary">#667085</color>
     <color name="nav_warning">#D97706</color>

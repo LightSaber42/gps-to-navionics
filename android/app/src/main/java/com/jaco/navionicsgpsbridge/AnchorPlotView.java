@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.view.View;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +51,15 @@ final class AnchorPlotView extends View {
     }
 
     @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int availableWidth = MeasureSpec.getSize(widthMeasureSpec);
+        int size = Math.min(availableWidth, Math.round(dp(420)));
+        setMeasuredDimension(
+                resolveSize(size, widthMeasureSpec),
+                resolveSize(size, heightMeasureSpec));
+    }
+
+    @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float width = getWidth();
@@ -59,14 +69,24 @@ final class AnchorPlotView extends View {
         float padding = dp(30);
         float drawableRadius = Math.max(1.0f, Math.min(width, height) / 2.0f - padding);
 
-        double furthestPoint = 0.0;
-        for (BridgeState.AnchorTrackPoint point : points) {
-            furthestPoint = Math.max(
-                    furthestPoint,
-                    Math.hypot(point.eastMeters, point.northMeters));
+        int recentStart = Math.max(0, points.size() - 120);
+        List<Double> recentExtents = new ArrayList<>();
+        for (int index = recentStart; index < points.size(); index++) {
+            BridgeState.AnchorTrackPoint point = points.get(index);
+            recentExtents.add(Math.hypot(point.eastMeters, point.northMeters)
+                    + Math.min(Math.max(0.0, point.accuracyMeters), limitMeters));
         }
-        double extentMeters = Math.max(5.0,
-                Math.max(limitMeters * 1.25, furthestPoint * 1.15));
+        Collections.sort(recentExtents);
+        double representativeExtent = recentExtents.isEmpty() ? 0.0 : recentExtents.get(
+                (int) Math.floor((recentExtents.size() - 1) * 0.95));
+        BridgeState.AnchorTrackPoint scalePoint = points.isEmpty()
+                ? null : points.get(points.size() - 1);
+        double currentExtent = scalePoint == null ? 0.0
+                : Math.hypot(scalePoint.eastMeters, scalePoint.northMeters)
+                        + Math.min(Math.max(0.0, scalePoint.accuracyMeters), limitMeters);
+        double extentMeters = Math.max(5.0, Math.max(
+                limitMeters * 1.2,
+                Math.max(representativeExtent * 1.12, currentExtent * 1.12)));
         float pixelsPerMeter = (float) (drawableRadius / extentMeters);
 
         paint.setStyle(Paint.Style.STROKE);
@@ -108,11 +128,17 @@ final class AnchorPlotView extends View {
 
         if (points.size() > 1) {
             Path trail = new Path();
+            boolean segmentStarted = false;
             for (int index = 0; index < points.size(); index++) {
                 BridgeState.AnchorTrackPoint point = points.get(index);
+                if (Math.hypot(point.eastMeters, point.northMeters) > extentMeters * 1.05) {
+                    segmentStarted = false;
+                    continue;
+                }
                 float x = centerX + (float) point.eastMeters * pixelsPerMeter;
                 float y = centerY - (float) point.northMeters * pixelsPerMeter;
-                if (index == 0) trail.moveTo(x, y); else trail.lineTo(x, y);
+                if (segmentStarted) trail.lineTo(x, y); else trail.moveTo(x, y);
+                segmentStarted = true;
             }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
@@ -129,6 +155,9 @@ final class AnchorPlotView extends View {
         paint.setStyle(Paint.Style.FILL);
         for (int index = 0; index < points.size(); index += pointStride) {
             BridgeState.AnchorTrackPoint point = points.get(index);
+            if (Math.hypot(point.eastMeters, point.northMeters) > extentMeters * 1.05) {
+                continue;
+            }
             float x = centerX + (float) point.eastMeters * pixelsPerMeter;
             float y = centerY - (float) point.northMeters * pixelsPerMeter;
             paint.setColor(withAlpha(Color.WHITE, 235));
