@@ -54,7 +54,7 @@ final class AnchorPlotView extends View {
         for (BridgeState.AnchorTrackPoint point : points) {
             furthestPoint = Math.max(
                     furthestPoint,
-                    Math.hypot(point.eastMeters, point.northMeters) + point.accuracyMeters);
+                    Math.hypot(point.eastMeters, point.northMeters));
         }
         double extentMeters = Math.max(5.0,
                 Math.max(limitMeters * 1.25, furthestPoint * 1.15));
@@ -78,6 +78,25 @@ final class AnchorPlotView extends View {
         canvas.drawCircle(centerX, centerY, limitRadius, paint);
         paint.setPathEffect(null);
 
+        BridgeState.AnchorTrackPoint current = points.isEmpty()
+                ? null : points.get(points.size() - 1);
+        float currentX = centerX;
+        float currentY = centerY;
+        if (current != null) {
+            currentX = centerX + (float) current.eastMeters * pixelsPerMeter;
+            currentY = centerY - (float) current.northMeters * pixelsPerMeter;
+            float accuracyRadius = (float) current.accuracyMeters * pixelsPerMeter;
+            if (accuracyRadius > 1.0f) {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(withAlpha(color(R.color.nav_success), 18));
+                canvas.drawCircle(currentX, currentY, accuracyRadius, paint);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(1));
+                paint.setColor(withAlpha(color(R.color.nav_success), 75));
+                canvas.drawCircle(currentX, currentY, accuracyRadius, paint);
+            }
+        }
+
         if (points.size() > 1) {
             Path trail = new Path();
             for (int index = 0; index < points.size(); index++) {
@@ -87,37 +106,29 @@ final class AnchorPlotView extends View {
                 if (index == 0) trail.moveTo(x, y); else trail.lineTo(x, y);
             }
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(2));
             paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setStrokeJoin(Paint.Join.ROUND);
-            paint.setColor(withAlpha(color(R.color.nav_blue), 185));
+            paint.setStrokeWidth(dp(7));
+            paint.setColor(withAlpha(Color.WHITE, 235));
+            canvas.drawPath(trail, paint);
+            paint.setStrokeWidth(dp(4));
+            paint.setColor(color(R.color.nav_blue_dark));
             canvas.drawPath(trail, paint);
         }
 
         int pointStride = Math.max(1, points.size() / 160);
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(withAlpha(color(R.color.nav_blue), 145));
         for (int index = 0; index < points.size(); index += pointStride) {
             BridgeState.AnchorTrackPoint point = points.get(index);
             float x = centerX + (float) point.eastMeters * pixelsPerMeter;
             float y = centerY - (float) point.northMeters * pixelsPerMeter;
-            canvas.drawCircle(x, y, dp(1.6f), paint);
+            paint.setColor(withAlpha(Color.WHITE, 235));
+            canvas.drawCircle(x, y, dp(3.8f), paint);
+            paint.setColor(color(R.color.nav_blue_dark));
+            canvas.drawCircle(x, y, dp(2.4f), paint);
         }
 
-        if (!points.isEmpty()) {
-            BridgeState.AnchorTrackPoint current = points.get(points.size() - 1);
-            float currentX = centerX + (float) current.eastMeters * pixelsPerMeter;
-            float currentY = centerY - (float) current.northMeters * pixelsPerMeter;
-            float accuracyRadius = (float) current.accuracyMeters * pixelsPerMeter;
-            if (accuracyRadius > 1.0f) {
-                paint.setStyle(Paint.Style.FILL);
-                paint.setColor(withAlpha(color(R.color.nav_success), 22));
-                canvas.drawCircle(currentX, currentY, accuracyRadius, paint);
-                paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(dp(1));
-                paint.setColor(withAlpha(color(R.color.nav_success), 75));
-                canvas.drawCircle(currentX, currentY, accuracyRadius, paint);
-            }
+        if (current != null) {
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(color(alarmTriggered ? R.color.nav_error : R.color.nav_success));
             canvas.drawCircle(currentX, currentY, dp(7), paint);
