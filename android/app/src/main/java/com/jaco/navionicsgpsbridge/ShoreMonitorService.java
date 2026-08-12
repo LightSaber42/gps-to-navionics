@@ -37,6 +37,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     static final String ACTION_START = "com.jaco.navionicsgpsbridge.SHORE_START";
     static final String ACTION_SILENCE = "com.jaco.navionicsgpsbridge.SHORE_SILENCE";
     static final String ACTION_STOP = "com.jaco.navionicsgpsbridge.SHORE_STOP";
+    static final String ACTION_UNPAIR = "com.jaco.navionicsgpsbridge.SHORE_UNPAIR";
 
     private static final String PREFERENCES = "shore_monitor";
     private static final String KEY_ENABLED = "enabled";
@@ -114,6 +115,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     private boolean lastReportedSoundReady;
     private boolean configurationLoaded;
     private boolean foregroundStarted;
+    private boolean monitoringEnabled;
 
     static void start(Context context) {
         Intent intent = new Intent(context, ShoreMonitorService.class).setAction(ACTION_START);
@@ -124,6 +126,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     public void onCreate() {
         super.onCreate();
         preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
+        monitoringEnabled = preferences.getBoolean(KEY_ENABLED, false);
         acknowledgedEventSequence = preferences.getLong(KEY_ACKNOWLEDGED_EVENT, 0L);
         sessionWasArmed = preferences.getBoolean(KEY_SESSION_WAS_ARMED, false);
         pairingStore = new AnchorPairingStore(this);
@@ -138,14 +141,38 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (ACTION_STOP.equals(action)) {
-            preferences.edit().putBoolean(KEY_ENABLED, false).apply();
+            stopMonitoring(false);
+            return START_NOT_STICKY;
+        }
+        if (ACTION_UNPAIR.equals(action)) {
             pairingStore.clearMonitor();
-            stopAlarmPresentation();
-            stopSelf();
+            stopMonitoring(true);
             return START_NOT_STICKY;
         }
         if (ACTION_SILENCE.equals(action)) {
-            silenceLocally();
+            if (monitoringEnabled) silenceLocally();
+            return monitoringEnabled ? START_STICKY : START_NOT_STICKY;
+        }
+        synchronized (lock) {
+            if (!monitoringEnabled) {
+                monitoringStartedElapsedMillis = SystemClock.elapsedRealtime();
+                lastStateElapsedMillis = 0L;
+                lastHeartbeatAtMillis = 0L;
+                connected = false;
+                connecting = false;
+                historyRequestInFlight = false;
+                linkLossEpisodeActive = false;
+                linkLossEventPending = false;
+                latestState = null;
+                activeRemoteEvent = null;
+                historyPoints.clear();
+                historySessionId = null;
+                lastConnectAttemptElapsedMillis = 0L;
+                statusMessage = configuration == null
+                        ? "Pair this phone with the boat device"
+                        : "Connecting to boat…";
+            }
+            monitoringEnabled = true;
         }
         preferences.edit().putBoolean(KEY_ENABLED, true).apply();
         startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification(snapshot()));
@@ -172,6 +199,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     @Override
     public void onConnected() {
         synchronized (lock) {
+            if (!monitoringEnabled) return;
             connected = true;
             connecting = false;
             linkLossEpisodeActive = false;
@@ -186,6 +214,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     public void onState(AnchorSyncProtocol.State state) {
         boolean shouldStopAfterDisarm = false;
         synchronized (lock) {
+            if (!monitoringEnabled) return;
             connected = true;
             connecting = false;
             latestState = state;
@@ -227,6 +256,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
         long after = 0L;
         boolean requestNext = false;
         synchronized (lock) {
+            if (!monitoringEnabled) return;
             historyRequestInFlight = false;
             if (latestState == null || latestState.sessionId == null
                     || !latestState.sessionId.equals(history.sessionId)) return;
@@ -247,6 +277,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     @Override
     public void onDisconnected(String message) {
         synchronized (lock) {
+            if (!monitoringEnabled) return;
             connected = false;
             connecting = false;
             historyRequestInFlight = false;
@@ -261,6 +292,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             AnchorPairingStore.MonitorConfiguration loaded = pairingStore.loadMonitor();
             boolean identityChanged;
             boolean endpointChanged;
+            AnchorSyncClient replacedClient = null;
             synchronized (lock) {
                 identityChanged = configurationLoaded && loaded != null
                         && (configuration == null
@@ -274,6 +306,8 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 configuration = loaded;
                 if (loaded == null) {
                     statusMessage = "Pair this phone with the boat device";
+                } else if (!monitoringEnabled) {
+                    statusMessage = "Monitoring stopped";
                 } else if (identityChanged) {
                     monitoringStartedElapsedMillis = SystemClock.elapsedRealtime();
                     lastStateElapsedMillis = 0L;
@@ -298,12 +332,13 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                     historyRequestInFlight = false;
                     statusMessage = "Connecting to boat…";
                 }
+                if (identityChanged || endpointChanged) {
+                    replacedClient = client;
+                    client = new AnchorSyncClient(this);
+                    lastConnectAttemptElapsedMillis = 0L;
+                }
             }
-            if (identityChanged || endpointChanged) {
-                client.stop();
-                client = new AnchorSyncClient(this);
-                lastConnectAttemptElapsedMillis = 0L;
-            }
+            if (replacedClient != null) replacedClient.stop();
         } catch (GeneralSecurityException | IllegalArgumentException error) {
             synchronized (lock) {
                 configuration = null;
@@ -320,6 +355,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
         boolean stateChanged = false;
         long now = SystemClock.elapsedRealtime();
         synchronized (lock) {
+            if (!monitoringEnabled) return;
             currentConfiguration = configuration;
             long heartbeatBaseline = lastStateElapsedMillis > 0L
                     ? lastStateElapsedMillis : monitoringStartedElapsedMillis;
@@ -333,16 +369,17 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 stateChanged = true;
             }
             if (currentConfiguration != null && !connected && !connecting
-                    && now - lastConnectAttemptElapsedMillis >= RECONNECT_INTERVAL_MILLIS) {
+                    && (lastConnectAttemptElapsedMillis == 0L
+                    || now - lastConnectAttemptElapsedMillis >= RECONNECT_INTERVAL_MILLIS)) {
                 connecting = true;
                 lastConnectAttemptElapsedMillis = now;
                 statusMessage = "Connecting to boat…";
                 shouldConnect = true;
                 stateChanged = true;
             }
+            if (shouldConnect) client.connect(currentConfiguration, isSoundReady());
         }
         if (shouldAlarmForLoss) updateAlarmPresentation();
-        if (shouldConnect) client.connect(currentConfiguration, isSoundReady());
         boolean soundReady = isSoundReady();
         if (soundReady != lastReportedSoundReady) {
             lastReportedSoundReady = soundReady;
@@ -392,12 +429,42 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     }
 
     private void stopAfterDisarm() {
-        preferences.edit()
+        stopMonitoring(false);
+    }
+
+    private void stopMonitoring(boolean unpair) {
+        AnchorSyncClient stoppedClient;
+        synchronized (lock) {
+            monitoringEnabled = false;
+            connected = false;
+            connecting = false;
+            historyRequestInFlight = false;
+            linkLossEpisodeActive = false;
+            linkLossEventPending = false;
+            sessionWasArmed = false;
+            latestState = null;
+            activeRemoteEvent = null;
+            historyPoints.clear();
+            historySessionId = null;
+            lastStateElapsedMillis = 0L;
+            lastHeartbeatAtMillis = 0L;
+            lastConnectAttemptElapsedMillis = 0L;
+            if (unpair) configuration = null;
+            if (unpair) acknowledgedEventSequence = 0L;
+            statusMessage = unpair ? "Not paired" : "Monitoring stopped";
+            stoppedClient = client;
+            client = new AnchorSyncClient(this);
+        }
+        SharedPreferences.Editor preferenceChanges = preferences.edit()
                 .putBoolean(KEY_ENABLED, false)
-                .putBoolean(KEY_SESSION_WAS_ARMED, false)
-                .apply();
+                .putBoolean(KEY_SESSION_WAS_ARMED, false);
+        if (unpair) preferenceChanges.remove(KEY_ACKNOWLEDGED_EVENT);
+        preferenceChanges.apply();
+        stoppedClient.stop();
+        stopAlarmPresentation();
         foregroundStarted = false;
         stopForeground(STOP_FOREGROUND_REMOVE);
+        emitState();
         stopSelf();
     }
 
@@ -499,6 +566,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                     : null;
             return new ShoreMonitorState(
                     configuration != null,
+                    monitoringEnabled,
                     connected,
                     isSoundReady(),
                     latestState != null && latestState.armed,
@@ -553,10 +621,6 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
         PendingIntent open = PendingIntent.getActivity(
                 this, 20, openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Intent stopIntent = new Intent(this, ShoreMonitorService.class).setAction(ACTION_STOP);
-        PendingIntent stop = PendingIntent.getService(
-                this, 21, stopIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String text = state.connected
                 ? (state.armed ? "Boat anchor watch live" : "Boat watch is disarmed")
                 : state.statusMessage;
@@ -568,7 +632,6 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
-                .addAction(new Notification.Action.Builder(null, "Stop monitor", stop).build())
                 .build();
     }
 
