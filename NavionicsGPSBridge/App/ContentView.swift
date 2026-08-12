@@ -379,9 +379,12 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity)
 
-            if controller.anchorMode == .freeSwinging {
-                radiusControl(title: "Swing radius", adjustableWhileArmed: true)
-            }
+            radiusControl(
+                title: controller.anchorMode == .freeSwinging
+                    ? "Swing radius"
+                    : "Alarm radius",
+                adjustableWhileArmed: true
+            )
 
             if controller.isLayingAnchor {
                 Button(role: .cancel, action: controller.cancelAnchorSetup) {

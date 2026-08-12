@@ -520,8 +520,7 @@ public final class BridgeService extends Service implements LocationListener,
         boolean adjustedWhileArmed = false;
         synchronized (stateLock) {
             if (anchorAlarmArmed) {
-                if (anchorMode != AnchorAlarm.Mode.FREE_SWINGING
-                        || mode != anchorMode) return;
+                if (mode != anchorMode) return;
                 double adjustedRadius = mode.adjustedRadius(radiusMeters);
                 if (adjustedRadius == anchorRadiusMeters) return;
                 anchorRadiusMeters = adjustedRadius;

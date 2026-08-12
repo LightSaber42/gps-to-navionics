@@ -132,7 +132,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView armedAnchorMode;
     private TextView armedAnchorDistance;
     private TextView armedAnchorDistanceLabel;
-    private LinearLayout armedSwingRadiusControls;
+    private LinearLayout armedRadiusControls;
+    private TextView armedAnchorRadiusLabel;
     private TextView armedAnchorRadiusValue;
     private Button armedAnchorRadiusMinusButton;
     private Button armedAnchorRadiusPlusButton;
@@ -321,27 +322,27 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         armedAnchorDistanceLabel.setGravity(Gravity.CENTER);
         plotCard.addView(armedAnchorDistanceLabel, matchWrap());
 
-        armedSwingRadiusControls = horizontal();
-        armedSwingRadiusControls.setGravity(Gravity.CENTER_VERTICAL);
-        TextView radiusLabel = text("Swing radius", 14, R.color.nav_secondary);
-        armedSwingRadiusControls.addView(radiusLabel,
+        armedRadiusControls = horizontal();
+        armedRadiusControls.setGravity(Gravity.CENTER_VERTICAL);
+        armedAnchorRadiusLabel = text("Alarm radius", 14, R.color.nav_secondary);
+        armedRadiusControls.addView(armedAnchorRadiusLabel,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         armedAnchorRadiusMinusButton = radiusStepButton("−", -1.0);
-        armedAnchorRadiusMinusButton.setContentDescription("Decrease swing radius");
-        armedSwingRadiusControls.addView(armedAnchorRadiusMinusButton,
+        armedAnchorRadiusMinusButton.setContentDescription("Decrease alarm radius");
+        armedRadiusControls.addView(armedAnchorRadiusMinusButton,
                 new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
         armedAnchorRadiusValue = text("50 m", 15, R.color.nav_text);
         armedAnchorRadiusValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         armedAnchorRadiusValue.setGravity(Gravity.CENTER);
-        armedSwingRadiusControls.addView(armedAnchorRadiusValue,
+        armedRadiusControls.addView(armedAnchorRadiusValue,
                 new LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT));
         armedAnchorRadiusPlusButton = radiusStepButton("+", 1.0);
-        armedAnchorRadiusPlusButton.setContentDescription("Increase swing radius");
-        armedSwingRadiusControls.addView(armedAnchorRadiusPlusButton,
+        armedAnchorRadiusPlusButton.setContentDescription("Increase alarm radius");
+        armedRadiusControls.addView(armedAnchorRadiusPlusButton,
                 new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams radiusParams = matchWrap();
         radiusParams.topMargin = dp(10);
-        plotCard.addView(armedSwingRadiusControls, radiusParams);
+        plotCard.addView(armedRadiusControls, radiusParams);
 
         cancelAnchorSetupButton = outlinedDangerButton(
                 "✕  Cancel anchoring", this::cancelAnchorSetup);
@@ -875,9 +876,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
         armedAnchorDistanceLabel.setText(String.format(
                 Locale.US, "distance from reference • %.0f m limit", state.anchorRadiusMeters));
-        boolean radiusAdjustable = (state.anchorAlarmArmed || setupActive)
-                && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING;
-        armedSwingRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
+        boolean radiusAdjustable = state.anchorAlarmArmed
+                || (setupActive && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING);
+        armedRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
+        armedAnchorRadiusLabel.setText(state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
+                ? "Swing radius" : "Alarm radius");
         armedAnchorRadiusValue.setText(String.format(
                 Locale.US, "%.0f m", state.anchorRadiusMeters));
         armedAnchorRadiusMinusButton.setEnabled(
