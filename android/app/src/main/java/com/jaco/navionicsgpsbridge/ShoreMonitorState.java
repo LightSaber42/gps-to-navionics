@@ -7,6 +7,7 @@ import java.util.List;
 /** Immutable UI snapshot for the read-only shore monitor. */
 final class ShoreMonitorState {
     final boolean paired;
+    final boolean enabled;
     final boolean connected;
     final boolean soundReady;
     final boolean armed;
@@ -23,13 +24,14 @@ final class ShoreMonitorState {
     final List<BridgeState.AnchorTrackPoint> history;
     final String statusMessage;
 
-    ShoreMonitorState(boolean paired, boolean connected, boolean soundReady,
+    ShoreMonitorState(boolean paired, boolean enabled, boolean connected, boolean soundReady,
             boolean armed, boolean alarmActive, String alarmReason, String mode,
             double radiusMeters, double distanceMeters, double accuracyMeters,
             int boatBatteryPercent, boolean boatCharging, String sessionId,
             long lastHeartbeatAtMillis, List<BridgeState.AnchorTrackPoint> history,
             String statusMessage) {
         this.paired = paired;
+        this.enabled = enabled;
         this.connected = connected;
         this.soundReady = soundReady;
         this.armed = armed;

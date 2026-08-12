@@ -20,6 +20,7 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -68,7 +69,9 @@ public final class ShoreMonitorActivity extends Activity
     private LinearLayout pairingCard;
     private LinearLayout safetyCard;
     private Button reconnectButton;
+    private Button startButton;
     private Button stopButton;
+    private Button unpairButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,7 +92,9 @@ public final class ShoreMonitorActivity extends Activity
     @Override
     protected void onStart() {
         super.onStart();
-        if (hasStoredPairing()) ShoreMonitorService.start(this);
+        if (hasStoredPairing() && ShoreMonitorService.isEnabled(this)) {
+            ShoreMonitorService.start(this);
+        }
         bound = bindService(
                 new Intent(this, ShoreMonitorService.class),
                 serviceConnection,
@@ -120,6 +125,13 @@ public final class ShoreMonitorActivity extends Activity
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(18), dp(24), dp(18), dp(32));
+        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+            int bottomInset = Build.VERSION.SDK_INT >= 30
+                    ? insets.getInsets(WindowInsets.Type.systemBars()).bottom
+                    : insets.getSystemWindowInsetBottom();
+            page.setPadding(dp(18), dp(24), dp(18), dp(32) + bottomInset);
+            return insets;
+        });
         ScrollView.LayoutParams pageParams = new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT);
@@ -247,39 +259,66 @@ public final class ShoreMonitorActivity extends Activity
         });
         page.addView(reconnectButton, matchWrap());
 
-        stopButton = button("Stop monitor and unpair", R.color.nav_error);
+        startButton = button("Start monitoring", R.color.nav_blue);
+        startButton.setOnClickListener(view -> ShoreMonitorService.start(this));
+        page.addView(startButton, matchWrap());
+
+        stopButton = button("Stop monitoring", R.color.nav_error);
         LinearLayout.LayoutParams stopParams = matchWrap();
         stopParams.topMargin = dp(12);
         page.addView(stopButton, stopParams);
         stopButton.setOnClickListener(view -> new AlertDialog.Builder(this)
-                .setTitle("Stop shore monitor?")
-                .setMessage("This phone will no longer alarm for the boat until it is paired again.")
+                .setTitle("Stop shore monitoring?")
+                .setMessage("This phone will stop connecting to the boat and will not sound "
+                        + "remote anchor alarms. The pairing will be kept so you can start "
+                        + "monitoring again later.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Stop and unpair", (dialog, which) -> {
-                    startService(new Intent(this, ShoreMonitorService.class)
-                            .setAction(ShoreMonitorService.ACTION_STOP));
-                    recreate();
-                })
+                .setPositiveButton("Stop monitoring", (dialog, which) -> startService(
+                        new Intent(this, ShoreMonitorService.class)
+                                .setAction(ShoreMonitorService.ACTION_STOP)))
+                .show());
+
+        unpairButton = button("Unpair this phone", R.color.nav_error);
+        LinearLayout.LayoutParams unpairParams = matchWrap();
+        unpairParams.topMargin = dp(12);
+        page.addView(unpairButton, unpairParams);
+        unpairButton.setOnClickListener(view -> new AlertDialog.Builder(this)
+                .setTitle("Unpair from the boat?")
+                .setMessage("Monitoring will stop and the saved pairing will be removed. "
+                        + "You will need a new pairing link from the boat device to monitor "
+                        + "it again.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Unpair", (dialog, which) -> startService(
+                        new Intent(this, ShoreMonitorService.class)
+                                .setAction(ShoreMonitorService.ACTION_UNPAIR)))
                 .show());
         boolean paired = hasStoredPairing();
+        boolean enabled = paired && ShoreMonitorService.isEnabled(this);
         pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
-        alarmCard.setVisibility(paired ? View.VISIBLE : View.GONE);
-        plotCard.setVisibility(paired ? View.VISIBLE : View.GONE);
-        reconnectButton.setVisibility(paired ? View.VISIBLE : View.GONE);
-        stopButton.setVisibility(paired ? View.VISIBLE : View.GONE);
+        alarmCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        plotCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        safetyCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        reconnectButton.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        startButton.setVisibility(paired && !enabled ? View.VISIBLE : View.GONE);
+        stopButton.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        unpairButton.setVisibility(paired ? View.VISIBLE : View.GONE);
         return scroll;
     }
 
     private void render(ShoreMonitorState state) {
-        boolean paired = hasStoredPairing();
+        boolean paired = state.paired;
+        boolean enabled = paired && state.enabled;
         pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
-        alarmCard.setVisibility(paired ? View.VISIBLE : View.GONE);
-        plotCard.setVisibility(paired ? View.VISIBLE : View.GONE);
-        safetyCard.setVisibility(!state.soundReady ? View.VISIBLE : View.GONE);
-        reconnectButton.setVisibility(paired && !state.connected ? View.VISIBLE : View.GONE);
-        stopButton.setVisibility(paired ? View.VISIBLE : View.GONE);
+        alarmCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        plotCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        safetyCard.setVisibility(enabled && !state.soundReady ? View.VISIBLE : View.GONE);
+        reconnectButton.setVisibility(enabled && !state.connected ? View.VISIBLE : View.GONE);
+        startButton.setVisibility(paired && !enabled ? View.VISIBLE : View.GONE);
+        stopButton.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        unpairButton.setVisibility(paired ? View.VISIBLE : View.GONE);
         statusValue.setText(state.connected ? "Connected" : state.statusMessage);
-        statusValue.setTextColor(getColor(state.connected ? R.color.nav_success : R.color.nav_warning));
+        statusValue.setTextColor(getColor(state.connected
+                ? R.color.nav_success : enabled ? R.color.nav_warning : R.color.nav_secondary));
         readinessValue.setText(state.soundReady
                 ? "Ready, including DND" : "Setup incomplete — tap below");
         readinessValue.setTextColor(getColor(state.soundReady
