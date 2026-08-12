@@ -11,6 +11,8 @@
     <color name="nav_text">#F9FAFB</color>
     <color name="nav_secondary">#D0D5DD</color>
     <color name="nav_warning">#FDB022</color>
+    <color name="nav_warning_surface">#332A16</color>
     <color name="nav_error">#F97066</color>
+    <color name="nav_error_surface">#3A1F24</color>
     <color name="nav_success">#32D583</color>
 </resources>

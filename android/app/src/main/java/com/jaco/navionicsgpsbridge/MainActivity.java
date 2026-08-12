@@ -4,9 +4,11 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -17,6 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -45,6 +48,15 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private static final int SECTION_BRIDGE = 0;
     private static final int SECTION_ANCHOR = 1;
 
+    private final BroadcastReceiver powerSaveModeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (PowerManager.ACTION_POWER_SAVE_MODE_CHANGED.equals(intent.getAction())) {
+                render(latestState);
+            }
+        }
+    };
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -60,6 +72,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private BridgeService.LocalBinder binder;
     private boolean bound;
+    private boolean powerSaveModeReceiverRegistered;
     private BridgeState latestState = emptyState();
     private String permissionError;
     private String anchorActionMessage;
@@ -102,6 +115,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView anchorMessage;
     private Button anchorPrimaryButton;
     private Button silenceAnchorButton;
+    private LinearLayout anchorPowerSavingWarning;
     private TextView permissionValue;
     private TextView positionValue;
     private TextView accuracyValue;
@@ -129,6 +143,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private Button armedAnchorSilenceButton;
     private AnchorPlotView anchorPlotView;
     private TextView anchorPlotNote;
+    private LinearLayout armedPowerSavingWarning;
     private TextView normalShoreMonitorValue;
     private TextView armedShoreMonitorValue;
 
@@ -148,12 +163,33 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     @Override
     protected void onStart() {
         super.onStart();
+        IntentFilter powerSaveFilter = new IntentFilter(
+                PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(
+                    powerSaveModeReceiver,
+                    powerSaveFilter,
+                    Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(powerSaveModeReceiver, powerSaveFilter);
+        }
+        powerSaveModeReceiverRegistered = true;
         bound = bindService(new Intent(this, BridgeService.class), serviceConnection, BIND_AUTO_CREATE);
         render(latestState);
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        render(latestState);
+    }
+
+    @Override
     protected void onStop() {
+        if (powerSaveModeReceiverRegistered) {
+            unregisterReceiver(powerSaveModeReceiver);
+            powerSaveModeReceiverRegistered = false;
+        }
         if (bound) {
             if (binder != null) binder.removeListener(this);
             unbindService(serviceConnection);
@@ -262,6 +298,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout.LayoutParams plotParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         plotCard.addView(anchorPlotView, plotParams);
+
+        armedPowerSavingWarning = buildPowerSavingWarning();
+        LinearLayout.LayoutParams powerWarningParams = matchWrap();
+        powerWarningParams.topMargin = dp(12);
+        plotCard.addView(armedPowerSavingWarning, powerWarningParams);
 
         armedAnchorPrimaryButton = actionButton("●  Arm anchor alarm", R.color.nav_blue);
         armedAnchorPrimaryButton.setOnClickListener(view -> handleActiveAnchorPrimaryAction());
@@ -489,6 +530,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 "The watch uses the marked point as its centre.");
         card.addView(freeSwingingWorkflow, matchWrap());
 
+        anchorPowerSavingWarning = buildPowerSavingWarning();
+        LinearLayout.LayoutParams powerWarningParams = matchWrap();
+        powerWarningParams.topMargin = dp(12);
+        card.addView(anchorPowerSavingWarning, powerWarningParams);
+
         anchorPrimaryButton = actionButton("Arm anchor alarm", R.color.nav_blue);
         anchorPrimaryButton.setOnClickListener(view -> toggleAnchorAlarm());
         LinearLayout.LayoutParams primaryParams = matchWrap();
@@ -656,6 +702,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         styleActionButton(streamButton, active ? R.color.nav_error : R.color.nav_blue);
         renderAnchorAlarm(state);
         renderArmedAnchorDashboard(state);
+        renderPowerSavingWarnings();
         renderShoreMonitorStatus(state);
 
         String visibleError = state.error != null ? state.error : permissionError;
@@ -917,6 +964,25 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                     .show();
             return;
         }
+        if (isLocationRestrictedByPowerSaving()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Turn off Power saving")
+                    .setMessage(
+                            "Power saving can stop or delay GPS when the screen locks. "
+                                    + "That can trigger a lost-GPS alarm after 30 seconds. "
+                                    + "Turn it off before relying on the anchor watch.")
+                    .setNegativeButton("Cancel", null)
+                    .setNeutralButton("Continue anyway", (dialog, which) ->
+                            continueAnchorPrimaryAction())
+                    .setPositiveButton("Open settings", (dialog, which) ->
+                            openPowerSavingSettings())
+                    .show();
+            return;
+        }
+        continueAnchorPrimaryAction();
+    }
+
+    private void continueAnchorPrimaryAction() {
         if (latestState.anchorSetupActive || anchorSetupRequested) {
             if (latestState.hasAnchorReference) {
                 beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
@@ -1123,6 +1189,33 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         }
     }
 
+    private void openPowerSavingSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        } catch (ActivityNotFoundException ignored) {
+            try {
+                startActivity(new Intent("android.settings.BATTERY_SETTINGS"));
+            } catch (ActivityNotFoundException ignoredAgain) {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            }
+        }
+    }
+
+    private boolean isLocationRestrictedByPowerSaving() {
+        PowerManager powerManager = getSystemService(PowerManager.class);
+        if (powerManager == null || !powerManager.isPowerSaveMode()) return false;
+        if (Build.VERSION.SDK_INT < 28) return true;
+        int locationMode = powerManager.getLocationPowerSaveMode();
+        return locationMode != PowerManager.LOCATION_MODE_NO_CHANGE
+                && locationMode != PowerManager.LOCATION_MODE_FOREGROUND_ONLY;
+    }
+
+    private void renderPowerSavingWarnings() {
+        int visibility = isLocationRestrictedByPowerSaving() ? View.VISIBLE : View.GONE;
+        anchorPowerSavingWarning.setVisibility(visibility);
+        armedPowerSavingWarning.setVisibility(visibility);
+    }
+
     private boolean hasFineLocationPermission() {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
@@ -1168,6 +1261,38 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         card.setBackground(background);
         card.setElevation(dp(1));
         return card;
+    }
+
+    private LinearLayout buildPowerSavingWarning() {
+        LinearLayout warning = vertical();
+        warning.setPadding(dp(14), dp(12), dp(14), dp(8));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_warning_surface));
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(2), getColor(R.color.nav_warning));
+        warning.setBackground(background);
+
+        TextView title = text("Turn off Power saving", 15, R.color.nav_warning);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        warning.addView(title, matchWrap());
+
+        TextView body = text(
+                "Power saving can interrupt GPS after the screen locks and cause a "
+                        + "lost-GPS alarm. Turn it off before relying on the anchor watch.",
+                13,
+                R.color.nav_text);
+        body.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.topMargin = dp(5);
+        warning.addView(body, bodyParams);
+
+        Button settings = smallButton(
+                "Open Power saving settings",
+                this::openPowerSavingSettings);
+        settings.setTextColor(getColor(R.color.nav_warning));
+        warning.addView(settings, wrapWrap());
+        warning.setVisibility(View.GONE);
+        return warning;
     }
 
     private void addCardHeader(LinearLayout card, String title) {
