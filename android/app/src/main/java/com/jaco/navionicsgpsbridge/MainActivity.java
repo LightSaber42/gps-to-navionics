@@ -17,6 +17,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -36,6 +37,7 @@ import java.util.Locale;
 public final class MainActivity extends Activity implements BridgeService.StateListener {
     private static final int PERMISSION_REQUEST = 42;
     private static final double STALE_FIX_SECONDS = 10.0;
+    private static final double MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS = 15.0;
     private static final int PENDING_NONE = 0;
     private static final int PENDING_STREAM = 1;
     private static final int PENDING_MARK_ANCHOR = 2;
@@ -62,6 +64,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private String permissionError;
     private String anchorActionMessage;
     private int pendingPermissionAction;
+    private long pendingAnchorFixStartedElapsedNanos;
+    private boolean anchorSetupRequested;
     private int selectedSection = SECTION_BRIDGE;
     private boolean lastRenderedAnchorArmed;
     private boolean lastRenderedAnchorTriggered;
@@ -97,7 +101,6 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView anchorStepOneDetail;
     private TextView anchorMessage;
     private Button anchorPrimaryButton;
-    private Button markAnchorButton;
     private Button silenceAnchorButton;
     private TextView permissionValue;
     private TextView positionValue;
@@ -119,10 +122,13 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private TextView armedAnchorRadiusValue;
     private Button armedAnchorRadiusMinusButton;
     private Button armedAnchorRadiusPlusButton;
+    private Button armedAnchorPrimaryButton;
+    private Button cancelAnchorSetupButton;
     private TextView armedAnchorTrackSummary;
     private TextView armedAnchorMessage;
     private Button armedAnchorSilenceButton;
     private AnchorPlotView anchorPlotView;
+    private TextView anchorPlotNote;
     private TextView normalShoreMonitorValue;
     private TextView armedShoreMonitorValue;
 
@@ -161,6 +167,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     public void onBridgeStateChanged(BridgeState state) {
         runOnUiThread(() -> {
             latestState = state;
+            if (state.anchorSetupActive || state.anchorAlarmArmed) {
+                anchorSetupRequested = false;
+            }
             render(state);
             tryCompletePendingAction();
         });
@@ -217,22 +226,21 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         anchorDashboard = vertical();
         disarmedAnchorDashboard = vertical();
         disarmedAnchorDashboard.addView(buildAnchorAlarmCard(), cardParams());
-        disarmedAnchorDashboard.addView(buildPairedAlarmCard(false), cardParams());
         LinearLayout anchorDetails = vertical();
         anchorDetails.addView(buildAnchorDetailsCard(), cardParams());
         disarmedAnchorDashboard.addView(
                 buildDisclosureSection("Watch details", anchorDetails), cardParams());
-        disarmedAnchorDashboard.addView(safetyNote(), matchWrap());
+        disarmedAnchorDashboard.addView(buildPairedAlarmCard(false), cardParams());
         anchorDashboard.addView(disarmedAnchorDashboard, matchWrap());
 
         armedAnchorDashboard = buildArmedAnchorDashboard();
         armedAnchorContainer = vertical();
         armedAnchorContainer.addView(armedAnchorDashboard, matchWrap());
-        armedAnchorContainer.addView(buildPairedAlarmCard(true), cardParams());
         LinearLayout armedDetails = vertical();
         armedDetails.addView(buildAnchorDetailsCard(), cardParams());
         armedAnchorContainer.addView(
                 buildDisclosureSection("Watch details", armedDetails), cardParams());
+        armedAnchorContainer.addView(buildPairedAlarmCard(true), cardParams());
         armedAnchorContainer.addView(safetyNote(), matchWrap());
         anchorDashboard.addView(armedAnchorContainer, matchWrap());
         content.addView(anchorDashboard, matchWrap());
@@ -245,20 +253,21 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         dashboard.setOrientation(LinearLayout.VERTICAL);
         LinearLayout plotCard = card();
 
-        LinearLayout statusLine = horizontal();
-        statusLine.setGravity(Gravity.CENTER_VERTICAL);
-        armedAnchorStatusDot = new View(this);
-        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(14), dp(14));
-        dotParams.setMarginEnd(dp(10));
-        statusLine.addView(armedAnchorStatusDot, dotParams);
-        armedAnchorStatusTitle = text("Anchor alarm armed", 20, R.color.nav_text);
-        armedAnchorStatusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        statusLine.addView(armedAnchorStatusTitle,
-                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        armedAnchorMode = text("Shorelined", 12, R.color.nav_secondary);
-        armedAnchorMode.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        statusLine.addView(armedAnchorMode, wrapWrap());
-        plotCard.addView(statusLine, matchWrap());
+        anchorPlotView = new AnchorPlotView(this);
+        GradientDrawable plotBackground = new GradientDrawable();
+        plotBackground.setColor(getColor(R.color.nav_background));
+        plotBackground.setCornerRadius(dp(14));
+        plotBackground.setStroke(dp(1), getColor(R.color.nav_plot_stroke));
+        anchorPlotView.setBackground(plotBackground);
+        LinearLayout.LayoutParams plotParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        plotCard.addView(anchorPlotView, plotParams);
+
+        armedAnchorPrimaryButton = actionButton("●  Arm anchor alarm", R.color.nav_blue);
+        armedAnchorPrimaryButton.setOnClickListener(view -> handleActiveAnchorPrimaryAction());
+        LinearLayout.LayoutParams primaryParams = matchWrap();
+        primaryParams.topMargin = dp(12);
+        plotCard.addView(armedAnchorPrimaryButton, primaryParams);
 
         armedAnchorDistance = text("—", 42, R.color.nav_text);
         armedAnchorDistance.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -293,16 +302,28 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         radiusParams.topMargin = dp(10);
         plotCard.addView(armedSwingRadiusControls, radiusParams);
 
-        anchorPlotView = new AnchorPlotView(this);
-        GradientDrawable plotBackground = new GradientDrawable();
-        plotBackground.setColor(getColor(R.color.nav_background));
-        plotBackground.setCornerRadius(dp(14));
-        plotBackground.setStroke(dp(1), getColor(R.color.nav_plot_stroke));
-        anchorPlotView.setBackground(plotBackground);
-        LinearLayout.LayoutParams plotParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        plotParams.topMargin = dp(14);
-        plotCard.addView(anchorPlotView, plotParams);
+        cancelAnchorSetupButton = outlinedDangerButton(
+                "✕  Cancel anchoring", this::cancelAnchorSetup);
+        LinearLayout.LayoutParams cancelParams = matchWrap();
+        cancelParams.topMargin = dp(12);
+        plotCard.addView(cancelAnchorSetupButton, cancelParams);
+
+        LinearLayout statusLine = horizontal();
+        statusLine.setGravity(Gravity.CENTER_VERTICAL);
+        armedAnchorStatusDot = new View(this);
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(14), dp(14));
+        dotParams.setMarginEnd(dp(10));
+        statusLine.addView(armedAnchorStatusDot, dotParams);
+        armedAnchorStatusTitle = text("Anchor alarm armed", 20, R.color.nav_text);
+        armedAnchorStatusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        statusLine.addView(armedAnchorStatusTitle,
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        armedAnchorMode = text("Shorelined", 12, R.color.nav_secondary);
+        armedAnchorMode.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        statusLine.addView(armedAnchorMode, wrapWrap());
+        LinearLayout.LayoutParams statusParams = matchWrap();
+        statusParams.topMargin = dp(14);
+        plotCard.addView(statusLine, statusParams);
 
         LinearLayout legend = horizontal();
         legend.setGravity(Gravity.CENTER);
@@ -333,20 +354,14 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         silenceParams.topMargin = dp(10);
         plotCard.addView(armedAnchorSilenceButton, silenceParams);
 
-        Button disarmButton = actionButton("■  Disarm anchor watch", R.color.nav_error);
-        disarmButton.setOnClickListener(view -> toggleAnchorAlarm());
-        LinearLayout.LayoutParams disarmParams = matchWrap();
-        disarmParams.topMargin = dp(10);
-        plotCard.addView(disarmButton, disarmParams);
-
-        TextView plotNote = text(
+        anchorPlotNote = text(
                 "North-up • focused on the alarm boundary, current position, and recent trail. "
                         + "Isolated older GPS outliers do not shrink the plot.",
                 12, R.color.nav_secondary);
-        plotNote.setGravity(Gravity.CENTER);
+        anchorPlotNote.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams noteParams = matchWrap();
         noteParams.topMargin = dp(10);
-        plotCard.addView(plotNote, noteParams);
+        plotCard.addView(anchorPlotNote, noteParams);
         dashboard.addView(plotCard, cardParams());
         return dashboard;
     }
@@ -480,11 +495,6 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         primaryParams.topMargin = dp(14);
         card.addView(anchorPrimaryButton, primaryParams);
 
-        markAnchorButton = smallButton("Drop anchor here", this::beginMarkAnchor);
-        LinearLayout.LayoutParams markParams = wrapWrap();
-        markParams.topMargin = dp(5);
-        card.addView(markAnchorButton, markParams);
-
         silenceAnchorButton = actionButton("Silence alarm", R.color.nav_warning);
         silenceAnchorButton.setOnClickListener(view -> sendServiceAction(
                 BridgeService.ACTION_SILENCE_ANCHOR));
@@ -492,7 +502,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         silenceParams.topMargin = dp(8);
         card.addView(silenceAnchorButton, silenceParams);
 
-        anchorMessage = text("", 13, R.color.nav_error);
+        anchorMessage = text("", 13, R.color.nav_secondary);
         anchorMessage.setLineSpacing(0.0f, 1.12f);
         anchorMessage.setPadding(0, dp(9), 0, 0);
         card.addView(anchorMessage, matchWrap());
@@ -514,9 +524,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private View buildPairedAlarmCard(boolean armedCard) {
         LinearLayout card = card();
-        addCardHeader(card, "Shore monitor");
+        addCardHeader(card, "Optional shore monitor");
         TextView description = text(
-                "Pair one Android phone for remote alarm and connection-loss alerts.",
+                "Add an Android phone for backup remote and connection-loss alerts.",
                 13,
                 R.color.nav_secondary);
         description.setLineSpacing(0.0f, 1.12f);
@@ -525,7 +535,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         if (armedCard) armedShoreMonitorValue = status;
         else normalShoreMonitorValue = status;
 
-        Button pair = smallButton("Pair or view code", () -> startActivity(
+        Button pair = smallButton("Set up or view pairing code", () -> startActivity(
                 new Intent(this, AnchorPairingActivity.class)));
         LinearLayout.LayoutParams pairParams = wrapWrap();
         pairParams.topMargin = dp(10);
@@ -618,7 +628,9 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     }
 
     private void render(BridgeState state) {
-        boolean armedScreen = state.anchorAlarmArmed;
+        boolean armedScreen = state.anchorAlarmArmed
+                || state.anchorSetupActive
+                || anchorSetupRequested;
         pageTitle.setText("GPS Bridge");
         disarmedAnchorDashboard.setVisibility(armedScreen ? View.GONE : View.VISIBLE);
         armedAnchorContainer.setVisibility(armedScreen ? View.VISIBLE : View.GONE);
@@ -689,7 +701,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
             sentencesValue.setTextColor(getColor(R.color.nav_text));
         }
 
-        if (active || state.anchorAlarmArmed) {
+        if (active || armedScreen) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -703,6 +715,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         updateModeButtons();
 
         boolean armed = state.anchorAlarmArmed;
+        boolean setupActive = state.anchorSetupActive || anchorSetupRequested;
         boolean triggered = state.anchorAlarmTriggered;
         if (triggered) {
             anchorStatusTitle.setText("ANCHOR ALARM");
@@ -716,7 +729,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         } else if (state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !state.hasAnchorReference) {
             anchorStatusTitle.setText("Record the anchor position");
-            setCircleColor(anchorStatusDot, getColor(R.color.nav_warning));
+            setCircleColor(anchorStatusDot, getColor(R.color.nav_blue));
         } else {
             anchorStatusTitle.setText("Anchor alarm ready");
             setCircleColor(anchorStatusDot, getColor(R.color.nav_blue));
@@ -729,35 +742,36 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                             + "tied position and watches a tight circle around it.");
         } else {
             anchorDescription.setText(
-                    "For a boat free to swing. Tap Drop anchor here at the anchor-drop point, "
+                    "For a boat free to swing. Tap Drop anchor at the anchor-drop point, "
                             + "then arm after paying out the rode.");
         }
 
-        shorelinedModeButton.setEnabled(!armed);
-        freeSwingingModeButton.setEnabled(!armed);
-        anchorRadiusMinusButton.setEnabled(!armed);
-        anchorRadiusPlusButton.setEnabled(!armed);
+        shorelinedModeButton.setEnabled(!armed && !setupActive);
+        freeSwingingModeButton.setEnabled(!armed && !setupActive);
+        anchorRadiusMinusButton.setEnabled(!armed && !setupActive);
+        anchorRadiusPlusButton.setEnabled(!armed && !setupActive);
         freeSwingingWorkflow.setVisibility(
                 state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING ? View.VISIBLE : View.GONE);
         anchorStepOneDetail.setText(state.hasAnchorReference
-                ? "Position recorded. Update it below if needed."
+                ? "Position recorded. Continue to step 2."
+                : pendingPermissionAction == PENDING_MARK_ANCHOR
+                ? "Waiting for a new, accurate GPS position."
                 : "Do this while the boat is over the anchor.");
 
         if (armed) {
             anchorPrimaryButton.setText("■  Disarm anchor watch");
             styleActionButton(anchorPrimaryButton, R.color.nav_error);
+        } else if (requiresNewAnchorReferenceFix(pendingPermissionAction)) {
+            anchorPrimaryButton.setText("⌖  Acquiring GPS position…");
+            styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         } else if (state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !state.hasAnchorReference) {
-            anchorPrimaryButton.setText("⚓  Drop anchor here");
+            anchorPrimaryButton.setText("⚓  Drop anchor");
             styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         } else {
             anchorPrimaryButton.setText("●  Arm anchor alarm");
             styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         }
-        markAnchorButton.setVisibility(
-                !armed && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
-                        && state.hasAnchorReference ? View.VISIBLE : View.GONE);
-        markAnchorButton.setText("Update anchor position here");
         silenceAnchorButton.setVisibility(triggered ? View.VISIBLE : View.GONE);
 
         String message = state.anchorAlertReason != null
@@ -773,10 +787,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
             value = "Connected · Sound ready";
             color = R.color.nav_success;
         } else if (state.shoreMonitorConnected) {
-            value = "Connected · Setup needed";
-            color = R.color.nav_warning;
+            value = state.anchorAlarmArmed ? "Connected · Setup needed" : "Connected";
+            color = state.anchorAlarmArmed ? R.color.nav_warning : R.color.nav_secondary;
         } else {
-            value = "Not paired";
+            value = "Not paired · Optional";
             color = R.color.nav_secondary;
         }
         if (normalShoreMonitorValue != null) {
@@ -790,12 +804,19 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     }
 
     private void renderArmedAnchorDashboard(BridgeState state) {
+        boolean setupActive = state.anchorSetupActive || anchorSetupRequested;
         if (state.anchorAlarmTriggered) {
             armedAnchorStatusTitle.setText("ANCHOR ALARM");
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_error));
         } else if (state.anchorAlarmSilenced) {
             armedAnchorStatusTitle.setText("Alarm silenced • monitoring");
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_warning));
+        } else if (setupActive && !state.hasAnchorReference) {
+            armedAnchorStatusTitle.setText("Acquiring anchor position");
+            setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_blue));
+        } else if (setupActive) {
+            armedAnchorStatusTitle.setText("Laying anchor");
+            setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_blue));
         } else {
             armedAnchorStatusTitle.setText("Anchor alarm armed");
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_success));
@@ -807,7 +828,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
         armedAnchorDistanceLabel.setText(String.format(
                 Locale.US, "distance from reference • %.0f m limit", state.anchorRadiusMeters));
-        boolean radiusAdjustable = state.anchorAlarmArmed
+        boolean radiusAdjustable = (state.anchorAlarmArmed || setupActive)
                 && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING;
         armedSwingRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
         armedAnchorRadiusValue.setText(String.format(
@@ -825,13 +846,29 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 state.anchorRadiusMeters,
                 state.anchorTrackPoints.size(),
                 accuracy));
-        String message = state.anchorAlertReason;
+        String message = state.anchorAlertReason != null
+                ? state.anchorAlertReason : setupActive ? anchorActionMessage : null;
         armedAnchorMessage.setText(message == null ? "" : message);
         armedAnchorMessage.setVisibility(message == null ? View.GONE : View.VISIBLE);
         armedAnchorMessage.setTextColor(getColor(
-                state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_warning));
+                state.anchorAlarmTriggered ? R.color.nav_error
+                        : setupActive ? R.color.nav_secondary : R.color.nav_warning));
         armedAnchorSilenceButton.setVisibility(
                 state.anchorAlarmTriggered ? View.VISIBLE : View.GONE);
+        armedAnchorPrimaryButton.setText(setupActive
+                ? state.hasAnchorReference
+                ? "●  Arm anchor alarm"
+                : "⌖  Acquiring anchor position…"
+                : "■  Disarm anchor watch");
+        armedAnchorPrimaryButton.setEnabled(!setupActive || state.hasAnchorReference);
+        styleActionButton(armedAnchorPrimaryButton,
+                setupActive ? R.color.nav_blue : R.color.nav_error);
+        cancelAnchorSetupButton.setVisibility(setupActive ? View.VISIBLE : View.GONE);
+        anchorPlotNote.setText(setupActive
+                ? "North-up • the trail begins at the anchor-drop point and updates while you "
+                        + "pay out the rode. The alarm is not armed yet."
+                : "North-up • focused on the alarm boundary, current position, and recent trail. "
+                        + "Isolated older GPS outliers do not shrink the plot.");
     }
 
     private void renderAddresses(List<BridgeState.NetworkAddress> addresses) {
@@ -880,19 +917,15 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                     .show();
             return;
         }
+        if (latestState.anchorSetupActive || anchorSetupRequested) {
+            if (latestState.hasAnchorReference) {
+                beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
+            }
+            return;
+        }
         if (selectedAnchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !latestState.hasAnchorReference) {
             beginMarkAnchor();
-            return;
-        }
-        if (!latestState.shoreMonitorConnected || !latestState.shoreMonitorSoundReady) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Shore alarm is not ready")
-                    .setMessage("You can arm in degraded mode, but the shore phone may not receive or sound alarms. Pair it and complete its alarm setup when possible.")
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Arm anyway", (dialog, which) ->
-                            beginPermissionProtectedAction(PENDING_ARM_ANCHOR))
-                    .show();
             return;
         }
         beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
@@ -900,18 +933,42 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private void beginMarkAnchor() {
         anchorActionMessage = null;
+        anchorSetupRequested = true;
+        startAnchorSetupService();
+        render(latestState);
         beginPermissionProtectedAction(PENDING_MARK_ANCHOR);
+    }
+
+    private void handleActiveAnchorPrimaryAction() {
+        toggleAnchorAlarm();
+    }
+
+    private void cancelAnchorSetup() {
+        anchorSetupRequested = false;
+        pendingPermissionAction = PENDING_NONE;
+        pendingAnchorFixStartedElapsedNanos = 0L;
+        anchorActionMessage = null;
+        sendServiceAction(BridgeService.ACTION_CANCEL_ANCHOR_SETUP);
+        render(latestState);
     }
 
     private void beginPermissionProtectedAction(int action) {
         pendingPermissionAction = action;
+        if (requiresNewAnchorReferenceFix(action)) {
+            pendingAnchorFixStartedElapsedNanos = SystemClock.elapsedRealtimeNanos();
+            anchorActionMessage = "Acquiring a new GPS position…";
+            renderAnchorAlarm(latestState);
+        } else {
+            pendingAnchorFixStartedElapsedNanos = 0L;
+        }
 
         List<String> missingPermissions = new ArrayList<>();
         if (!hasFineLocationPermission()) {
             missingPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
             missingPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
-        if (Build.VERSION.SDK_INT >= 33
+        if (action != PENDING_MARK_ANCHOR
+                && Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
             missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS);
@@ -930,19 +987,40 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         if (pendingPermissionAction == PENDING_NONE || !hasFineLocationPermission()) return;
         if (pendingPermissionAction == PENDING_STREAM) {
             pendingPermissionAction = PENDING_NONE;
+            pendingAnchorFixStartedElapsedNanos = 0L;
             startBridgeService();
             return;
         }
         if (!hasFreshGpsFix(latestState)) {
-            anchorActionMessage = "Waiting for a fresh GPS fix…";
+            anchorActionMessage = "Acquiring a fresh GPS position…";
             anchorMessage.setText(anchorActionMessage);
             anchorMessage.setVisibility(View.VISIBLE);
             if (binder != null) binder.refreshLocationUpdates();
             return;
         }
 
+        if (requiresNewAnchorReferenceFix(pendingPermissionAction)) {
+            if (latestState.fixElapsedRealtimeNanos
+                    <= pendingAnchorFixStartedElapsedNanos) {
+                anchorActionMessage = "Acquiring a new GPS position…";
+                renderAnchorAlarm(latestState);
+                return;
+            }
+            if (latestState.accuracyMeters
+                    > MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS) {
+                anchorActionMessage = String.format(
+                        Locale.US,
+                        "Improving GPS accuracy… currently ±%.0f m; need ±%.0f m.",
+                        latestState.accuracyMeters,
+                        MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS);
+                renderAnchorAlarm(latestState);
+                return;
+            }
+        }
+
         int action = pendingPermissionAction;
         pendingPermissionAction = PENDING_NONE;
+        pendingAnchorFixStartedElapsedNanos = 0L;
         if (action == PENDING_MARK_ANCHOR) {
             if (binder == null) {
                 anchorActionMessage = "GPS service is reconnecting. Try again in a moment.";
@@ -980,7 +1058,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
             if (binder != null) binder.refreshLocationUpdates();
             tryCompletePendingAction();
         } else {
-            pendingPermissionAction = PENDING_NONE;
+            if (pendingPermissionAction != PENDING_MARK_ANCHOR) {
+                pendingPermissionAction = PENDING_NONE;
+                pendingAnchorFixStartedElapsedNanos = 0L;
+            }
             permissionError = "Choose Precise Location for GPS streaming and the anchor alarm.";
             render(latestState);
         }
@@ -989,6 +1070,14 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private void startBridgeService() {
         Intent startIntent = new Intent(this, BridgeService.class).setAction(BridgeService.ACTION_START);
         startForegroundServiceCompat(startIntent);
+    }
+
+    private void startAnchorSetupService() {
+        Intent intent = new Intent(this, BridgeService.class)
+                .setAction(BridgeService.ACTION_BEGIN_ANCHOR_SETUP)
+                .putExtra(BridgeService.EXTRA_ANCHOR_MODE, selectedAnchorMode.storageValue)
+                .putExtra(BridgeService.EXTRA_ANCHOR_RADIUS, selectedAnchorRadiusMeters);
+        startForegroundServiceCompat(intent);
     }
 
     private void startAnchorService(double referenceLatitude, double referenceLongitude) {
@@ -1016,6 +1105,12 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private static boolean hasFreshGpsFix(BridgeState state) {
         return state.hasLocation && state.accuracyMeters >= 0.0
                 && state.fixAgeSeconds <= STALE_FIX_SECONDS;
+    }
+
+    private boolean requiresNewAnchorReferenceFix(int action) {
+        return action == PENDING_MARK_ANCHOR
+                || (action == PENDING_ARM_ANCHOR
+                && selectedAnchorMode == AnchorAlarm.Mode.SHORELINED);
     }
 
     private void openAppSettings() {
@@ -1175,11 +1270,14 @@ public final class MainActivity extends Activity implements BridgeService.StateL
 
     private void updateSectionButtons(BridgeState state) {
         bridgeSectionButton.setText(state.streaming ? "Bridge  •" : "Bridge");
-        anchorSectionButton.setText(state.anchorAlarmArmed ? "Anchor  •" : "Anchor");
+        boolean anchorActive = state.anchorAlarmArmed
+                || state.anchorSetupActive
+                || anchorSetupRequested;
+        anchorSectionButton.setText(anchorActive ? "Anchor  •" : "Anchor");
         bridgeSectionButton.setContentDescription(
                 state.streaming ? "Bridge, active" : "Bridge, inactive");
-        anchorSectionButton.setContentDescription(
-                state.anchorAlarmArmed ? "Anchor, armed" : "Anchor, disarmed");
+        anchorSectionButton.setContentDescription(state.anchorAlarmArmed
+                ? "Anchor, armed" : anchorActive ? "Anchor, laying anchor" : "Anchor, disarmed");
     }
 
     private View buildDisclosureSection(String title, LinearLayout body) {
@@ -1284,7 +1382,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     }
 
     private void chooseAnchorMode(AnchorAlarm.Mode mode) {
-        if (mode == selectedAnchorMode || latestState.anchorAlarmArmed) return;
+        if (mode == selectedAnchorMode || latestState.anchorAlarmArmed
+                || latestState.anchorSetupActive || anchorSetupRequested) return;
+        pendingPermissionAction = PENDING_NONE;
+        pendingAnchorFixStartedElapsedNanos = 0L;
         selectedAnchorMode = mode;
         selectedAnchorRadiusMeters = mode.defaultRadiusMeters;
         anchorActionMessage = null;
@@ -1368,8 +1469,29 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         button.setTextSize(16);
         button.setTextColor(Color.WHITE);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setMinHeight(dp(52));
+        button.setMinHeight(dp(60));
         styleActionButton(button, colorResource);
+        return button;
+    }
+
+    private Button outlinedDangerButton(String label, Runnable action) {
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setText(label);
+        button.setTextSize(16);
+        button.setTextColor(getColor(R.color.nav_error));
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setMinHeight(dp(54));
+        button.setMinWidth(0);
+        button.setPadding(dp(16), 0, dp(16), 0);
+        button.setElevation(0);
+        button.setStateListAnimator(null);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_error_surface));
+        background.setCornerRadius(dp(24));
+        background.setStroke(dp(2), getColor(R.color.nav_error));
+        button.setBackground(background);
+        button.setOnClickListener(view -> action.run());
         return button;
     }
 
@@ -1471,10 +1593,10 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         return new BridgeState(
                 false, false,
                 0.0, 0.0, 0.0, -1.0, -1.0, -1.0,
-                Double.POSITIVE_INFINITY, 0, 0, "Stopped",
+                Double.POSITIVE_INFINITY, 0L, 0, 0, "Stopped",
                 new ArrayList<>(), "", null,
                 AnchorAlarm.Mode.SHORELINED,
-                false, false, false, false,
+                false, false, false, false, false,
                 0.0, 0.0, 15.0, Double.NaN, new ArrayList<>(), null,
                 false, false);
     }

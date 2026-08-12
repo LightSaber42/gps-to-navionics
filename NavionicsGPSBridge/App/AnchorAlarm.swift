@@ -51,7 +51,7 @@ enum AnchorAlarmMode: String, CaseIterable, Identifiable, Sendable {
         case .shorelined:
             "For a bow anchor with the stern tied ashore. Arming records the boat's current tied position and watches a tight circle around it."
         case .freeSwinging:
-            "For a boat free to swing. Tap Drop anchor here at the anchor-drop point, then arm after paying out the rode."
+            "For a boat free to swing. Tap Drop anchor at the anchor-drop point, then arm after paying out the rode."
         }
     }
 }

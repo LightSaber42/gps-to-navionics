@@ -18,6 +18,7 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var lastError: String?
     @Published private(set) var anchorMode = AnchorAlarmMode.shorelined
     @Published private(set) var anchorRadiusMeters = 15.0
+    @Published private(set) var isLayingAnchor = false
     @Published private(set) var anchorAlarmArmed = false
     @Published private(set) var anchorAlarmTriggered = false
     @Published private(set) var anchorAlarmSilenced = false
@@ -52,6 +53,7 @@ final class BridgeController: NSObject, ObservableObject,
     private static let disarmActionIdentifier = "DISARM_ANCHOR_ALARM"
     private static let alarmNotificationPrefix = "anchor-alarm."
     private static let staleFixSeconds: TimeInterval = 10
+    private static let maximumAnchorReferenceAccuracyMeters = 15.0
     private static let lostFixAlarmSeconds: TimeInterval = 30
     private static let breachConfirmationSeconds: TimeInterval = 5
     private let locationManager = CLLocationManager()
@@ -65,6 +67,7 @@ final class BridgeController: NSObject, ObservableObject,
     private var monitorTimer: Timer?
     private var locationUpdatesActive = false
     private var pendingAnchorAction: PendingAnchorAction?
+    private var pendingAnchorActionStartedAt: Date?
     private var anchorArmedAt: Date?
     private var breachStartedAt: Date?
     private var alarmAudioPlayer: AVAudioPlayer?
@@ -126,6 +129,9 @@ final class BridgeController: NSObject, ObservableObject,
             anchorTrackPoints = anchorHistoryStore.renderedPoints
             updateLocationMonitoring()
             updateMonitorTimer()
+        } else {
+            anchorReferenceCoordinate = nil
+            defaults.set(false, forKey: DefaultsKey.hasReference)
         }
         refreshNetworkAddresses()
         publishAnchorSyncState()
@@ -162,6 +168,10 @@ final class BridgeController: NSObject, ObservableObject,
         if anchorAlarmTriggered { return "ANCHOR ALARM" }
         if anchorAlarmSilenced { return "Alarm silenced • still monitoring" }
         if anchorAlarmArmed { return "Armed • \(anchorMode.displayName)" }
+        if isLayingAnchor, anchorReferenceCoordinate == nil {
+            return "Acquiring anchor position"
+        }
+        if isLayingAnchor { return "Laying anchor" }
         if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
             return "Record the anchor position"
         }
@@ -172,14 +182,16 @@ final class BridgeController: NSObject, ObservableObject,
         if anchorAlarmTriggered { return "red" }
         if anchorAlarmSilenced { return "orange" }
         if anchorAlarmArmed { return "green" }
-        if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil { return "orange" }
+        if isLayingAnchor { return "blue" }
+        if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil { return "blue" }
         return "blue"
     }
 
     var anchorPrimaryButtonTitle: String {
         if anchorAlarmArmed { return "Disarm anchor alarm" }
+        if isAcquiringAnchorReference { return "Acquiring GPS position…" }
         if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
-            return "Drop anchor here"
+            return "Drop anchor"
         }
         return "Arm anchor alarm"
     }
@@ -251,7 +263,7 @@ final class BridgeController: NSObject, ObservableObject,
         guard !isStreaming else { return }
         isStreaming = true
         lastError = nil
-        UIApplication.shared.isIdleTimerDisabled = true
+        updateIdleTimer()
 
         server.start(port: port)
         updateMonitorTimer()
@@ -276,18 +288,21 @@ final class BridgeController: NSObject, ObservableObject,
         connectedClientCount = 0
         listenerDescription = "Stopped"
         isStreaming = false
+        updateIdleTimer()
         updateMonitorTimer()
         updateLocationMonitoring()
     }
 
     func setAnchorMode(_ mode: AnchorAlarmMode) {
-        guard !anchorAlarmArmed, anchorMode != mode else { return }
+        guard !anchorAlarmArmed, !isLayingAnchor, anchorMode != mode else { return }
         anchorMode = mode
         anchorRadiusMeters = mode.defaultRadiusMeters
         anchorReferenceCoordinate = nil
         anchorDistanceMeters = nil
         clearAnchorTrack()
         anchorActionMessage = nil
+        pendingAnchorAction = nil
+        pendingAnchorActionStartedAt = nil
         persistAnchorConfiguration()
     }
 
@@ -309,6 +324,9 @@ final class BridgeController: NSObject, ObservableObject,
         anchorActionMessage = nil
         if anchorAlarmArmed {
             disarmAnchorAlarm()
+        } else if isLayingAnchor {
+            guard anchorReferenceCoordinate != nil else { return }
+            prepareForAnchorAction(.arm)
         } else if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
             markAnchorPosition()
         } else {
@@ -317,9 +335,38 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func markAnchorPosition() {
-        guard !anchorAlarmArmed else { return }
+        guard !anchorAlarmArmed, anchorMode == .freeSwinging else { return }
+        isLayingAnchor = true
+        anchorReferenceCoordinate = nil
+        anchorDistanceMeters = nil
+        clearAnchorTrack()
+        _ = anchorHistoryStore.startNewSession()
         anchorActionMessage = nil
+        persistAnchorConfiguration(armed: false)
+        updateIdleTimer()
         prepareForAnchorAction(.mark)
+    }
+
+    func armAnchorAlarm() {
+        guard !anchorAlarmArmed, anchorReferenceCoordinate != nil else { return }
+        anchorActionMessage = nil
+        prepareForAnchorAction(.arm)
+    }
+
+    func cancelAnchorSetup() {
+        guard isLayingAnchor else { return }
+        isLayingAnchor = false
+        pendingAnchorAction = nil
+        pendingAnchorActionStartedAt = nil
+        anchorReferenceCoordinate = nil
+        anchorDistanceMeters = nil
+        anchorActionMessage = nil
+        clearAnchorTrack()
+        _ = anchorHistoryStore.startNewSession()
+        persistAnchorConfiguration(armed: false)
+        updateIdleTimer()
+        updateLocationMonitoring()
+        publishAnchorSyncState(immediately: true)
     }
 
     func silenceAnchorAlarm() {
@@ -335,17 +382,24 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func disarmAnchorAlarm() {
+        isLayingAnchor = false
         anchorAlarmArmed = false
         anchorAlarmTriggered = false
         anchorAlarmSilenced = false
         anchorAlertReason = nil
+        anchorActionMessage = nil
+        pendingAnchorAction = nil
+        pendingAnchorActionStartedAt = nil
+        anchorReferenceCoordinate = nil
         anchorDistanceMeters = nil
+        clearAnchorTrack()
         anchorEventLog.acknowledgeLocally()
         anchorArmedAt = nil
         breachStartedAt = nil
         stopAlarmAudio()
-        defaults.set(false, forKey: DefaultsKey.armed)
+        persistAnchorConfiguration(armed: false)
         cancelAlarmNotifications()
+        updateIdleTimer()
         updateMonitorTimer()
         updateLocationMonitoring()
         publishAnchorSyncState(immediately: true)
@@ -391,7 +445,12 @@ final class BridgeController: NSObject, ObservableObject,
             locationUpdatesActive = false
             manager.stopUpdatingLocation()
             lastError = "Enable Precise Location in Settings for GPS streaming and the anchor alarm."
-            pendingAnchorAction = nil
+            if isLayingAnchor {
+                anchorActionMessage = "Enable Precise Location in Settings to record the anchor position."
+            } else {
+                pendingAnchorAction = nil
+                pendingAnchorActionStartedAt = nil
+            }
             if anchorAlarmArmed {
                 triggerAnchorAlarm(
                     reason: "Location permission is unavailable, so the anchor position cannot be monitored.",
@@ -442,6 +501,12 @@ final class BridgeController: NSObject, ObservableObject,
 
     private func prepareForAnchorAction(_ action: PendingAnchorAction) {
         pendingAnchorAction = action
+        if actionRequiresNewAnchorReference(action) {
+            pendingAnchorActionStartedAt = Date()
+            anchorActionMessage = "Acquiring a new GPS position…"
+        } else {
+            pendingAnchorActionStartedAt = nil
+        }
         switch authorizationStatus {
         case .notDetermined:
             anchorActionMessage = "Allow Precise Location, then wait for a fresh GPS fix."
@@ -450,10 +515,14 @@ final class BridgeController: NSObject, ObservableObject,
             updateLocationMonitoring()
             tryCompletePendingAnchorAction()
         case .denied, .restricted:
-            pendingAnchorAction = nil
             anchorActionMessage = "Enable Precise Location in Settings before using the anchor alarm."
+            if !isLayingAnchor {
+                pendingAnchorAction = nil
+                pendingAnchorActionStartedAt = nil
+            }
         @unknown default:
             pendingAnchorAction = nil
+            pendingAnchorActionStartedAt = nil
             anchorActionMessage = "The current location authorization state is unsupported."
         }
     }
@@ -463,16 +532,35 @@ final class BridgeController: NSObject, ObservableObject,
         guard let latestLocation,
               latestLocation.horizontalAccuracy >= 0,
               fixAge(for: latestLocation) <= Self.staleFixSeconds else {
-            anchorActionMessage = "Waiting for a fresh GPS fix…"
+            anchorActionMessage = "Acquiring a fresh GPS position…"
             return
         }
 
+        if actionRequiresNewAnchorReference(action) {
+            guard let startedAt = pendingAnchorActionStartedAt,
+                  latestLocation.timestamp > startedAt else {
+                anchorActionMessage = "Acquiring a new GPS position…"
+                return
+            }
+            guard latestLocation.horizontalAccuracy
+                    <= Self.maximumAnchorReferenceAccuracyMeters else {
+                anchorActionMessage = String(
+                    format: "Improving GPS accuracy… currently ±%.0f m; need ±%.0f m.",
+                    latestLocation.horizontalAccuracy,
+                    Self.maximumAnchorReferenceAccuracyMeters
+                )
+                return
+            }
+        }
+
         pendingAnchorAction = nil
+        pendingAnchorActionStartedAt = nil
         switch action {
         case .mark:
             anchorReferenceCoordinate = latestLocation.coordinate
             anchorDistanceMeters = 0
             anchorActionMessage = "Anchor-drop position recorded. Arm after paying out the rode."
+            appendAnchorTrackPoint(latestLocation, relativeTo: latestLocation.coordinate)
             persistAnchorConfiguration()
             updateLocationMonitoring()
         case .arm:
@@ -484,14 +572,18 @@ final class BridgeController: NSObject, ObservableObject,
                 updateLocationMonitoring()
                 return
             }
+            let wasLayingAnchor = isLayingAnchor
+            isLayingAnchor = false
             anchorAlarmArmed = true
             anchorAlarmTriggered = false
             anchorAlarmSilenced = false
             anchorAlertReason = nil
             anchorActionMessage = nil
-            anchorDistanceMeters = nil
-            clearAnchorTrack()
-            _ = anchorHistoryStore.startNewSession()
+            if !wasLayingAnchor {
+                anchorDistanceMeters = nil
+                clearAnchorTrack()
+                _ = anchorHistoryStore.startNewSession()
+            }
             anchorArmedAt = Date()
             breachStartedAt = nil
             breachEventIssued = false
@@ -500,6 +592,7 @@ final class BridgeController: NSObject, ObservableObject,
             criticalBatteryEventIssued = false
             persistAnchorConfiguration(armed: true)
             requestAlarmNotificationAuthorization()
+            updateIdleTimer()
             updateLocationMonitoring()
             updateMonitorTimer()
             evaluateAnchorPosition(latestLocation)
@@ -514,7 +607,7 @@ final class BridgeController: NSObject, ObservableObject,
         let authorized = authorizationStatus == .authorizedAlways
             || authorizationStatus == .authorizedWhenInUse
         let monitoringRequired = isStreaming || anchorAlarmArmed
-        let locationRequired = monitoringRequired || pendingAnchorAction != nil
+        let locationRequired = monitoringRequired || isLayingAnchor || pendingAnchorAction != nil
 
         guard authorized, locationRequired else {
             if locationUpdatesActive {
@@ -528,6 +621,20 @@ final class BridgeController: NSObject, ObservableObject,
         if !locationUpdatesActive {
             locationManager.startUpdatingLocation()
             locationUpdatesActive = true
+        }
+    }
+
+    private var isAcquiringAnchorReference: Bool {
+        guard let pendingAnchorAction else { return false }
+        return actionRequiresNewAnchorReference(pendingAnchorAction)
+    }
+
+    private func actionRequiresNewAnchorReference(_ action: PendingAnchorAction) -> Bool {
+        switch action {
+        case .mark:
+            return true
+        case .arm:
+            return anchorMode == .shorelined
         }
     }
 
@@ -579,7 +686,8 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     private func evaluateAnchorPosition(_ location: CLLocation) {
-        guard anchorAlarmArmed, let reference = anchorReferenceCoordinate else { return }
+        guard (anchorAlarmArmed || isLayingAnchor),
+              let reference = anchorReferenceCoordinate else { return }
         appendAnchorTrackPoint(location, relativeTo: reference)
         let assessment = AnchorAlarmGeometry.assess(
             referenceLatitude: reference.latitude,
@@ -590,6 +698,8 @@ final class BridgeController: NSObject, ObservableObject,
             radiusMeters: anchorRadiusMeters
         )
         anchorDistanceMeters = assessment.distanceMeters
+
+        guard anchorAlarmArmed else { return }
 
         guard assessment.isDefinitelyOutside else {
             breachStartedAt = nil
@@ -713,6 +823,12 @@ final class BridgeController: NSObject, ObservableObject,
 
     private func clearAnchorTrack() {
         anchorTrackPoints.removeAll(keepingCapacity: true)
+    }
+
+    private func updateIdleTimer() {
+        UIApplication.shared.isIdleTimerDisabled = isStreaming
+            || anchorAlarmArmed
+            || isLayingAnchor
     }
 
     private func startAlarmAudio() {

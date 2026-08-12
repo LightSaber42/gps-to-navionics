@@ -35,6 +35,7 @@ final class BridgeState {
     final double speedMetersPerSecond;
     final double courseDegrees;
     final double fixAgeSeconds;
+    final long fixElapsedRealtimeNanos;
     final int clientCount;
     final int udpBroadcastTargetCount;
     final String listenerDescription;
@@ -42,6 +43,7 @@ final class BridgeState {
     final String lastSentences;
     final String error;
     final AnchorAlarm.Mode anchorMode;
+    final boolean anchorSetupActive;
     final boolean anchorAlarmArmed;
     final boolean anchorAlarmTriggered;
     final boolean anchorAlarmSilenced;
@@ -65,6 +67,7 @@ final class BridgeState {
             double speedMetersPerSecond,
             double courseDegrees,
             double fixAgeSeconds,
+            long fixElapsedRealtimeNanos,
             int clientCount,
             int udpBroadcastTargetCount,
             String listenerDescription,
@@ -72,6 +75,7 @@ final class BridgeState {
             String lastSentences,
             String error,
             AnchorAlarm.Mode anchorMode,
+            boolean anchorSetupActive,
             boolean anchorAlarmArmed,
             boolean anchorAlarmTriggered,
             boolean anchorAlarmSilenced,
@@ -94,6 +98,7 @@ final class BridgeState {
         this.speedMetersPerSecond = speedMetersPerSecond;
         this.courseDegrees = courseDegrees;
         this.fixAgeSeconds = fixAgeSeconds;
+        this.fixElapsedRealtimeNanos = fixElapsedRealtimeNanos;
         this.clientCount = clientCount;
         this.udpBroadcastTargetCount = udpBroadcastTargetCount;
         this.listenerDescription = listenerDescription;
@@ -101,6 +106,7 @@ final class BridgeState {
         this.lastSentences = lastSentences;
         this.error = error;
         this.anchorMode = anchorMode;
+        this.anchorSetupActive = anchorSetupActive;
         this.anchorAlarmArmed = anchorAlarmArmed;
         this.anchorAlarmTriggered = anchorAlarmTriggered;
         this.anchorAlarmSilenced = anchorAlarmSilenced;

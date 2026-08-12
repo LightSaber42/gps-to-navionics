@@ -11,7 +11,6 @@ struct ContentView: View {
     @StateObject private var controller = BridgeController()
     @State private var selectedSection = DashboardSection.bridge
     @State private var showingAnchorPairing = false
-    @State private var showingDegradedArmWarning = false
     @State private var showingDisarmConfirmation = false
     @State private var showingBridgeSetup = false
     @State private var showingBridgeDetails = false
@@ -43,14 +42,6 @@ struct ContentView: View {
                     rotatePairing: controller.rotateAnchorPairing
                 )
             }
-            .alert("Shore alarm is not ready", isPresented: $showingDegradedArmWarning) {
-                Button("Cancel", role: .cancel) {}
-                Button("Arm anyway", role: .destructive) {
-                    controller.toggleAnchorAlarm()
-                }
-            } message: {
-                Text("You can arm in degraded mode, but the shore phone may not receive or sound alarms. Pair it and complete its alarm setup when possible.")
-            }
             .alert("Disarm anchor watch?", isPresented: $showingDisarmConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Disarm", role: .destructive, action: controller.disarmAnchorAlarm)
@@ -58,7 +49,7 @@ struct ContentView: View {
                 Text("The boat will no longer be monitored for drift or GPS loss.")
             }
             .onAppear {
-                if controller.anchorAlarmArmed {
+                if controller.anchorAlarmArmed || controller.isLayingAnchor {
                     selectedSection = .anchor
                 }
             }
@@ -73,7 +64,10 @@ struct ContentView: View {
     private var sectionSwitcher: some View {
         HStack(spacing: 6) {
             sectionButton(.bridge, active: controller.isStreaming)
-            sectionButton(.anchor, active: controller.anchorAlarmArmed)
+            sectionButton(
+                .anchor,
+                active: controller.anchorAlarmArmed || controller.isLayingAnchor
+            )
         }
         .padding(4)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -264,14 +258,16 @@ struct ContentView: View {
 
     private var anchorDashboard: some View {
         VStack(spacing: 16) {
-            if controller.anchorAlarmArmed {
+            if controller.anchorAlarmArmed || controller.isLayingAnchor {
                 armedAnchorDashboard
             } else {
                 anchorSetupCard
             }
-            shoreMonitorCard
             anchorDetailsCard
-            safetyNote
+            shoreMonitorCard
+            if controller.anchorAlarmArmed {
+                safetyNote
+            }
         }
     }
 
@@ -318,21 +314,16 @@ struct ContentView: View {
 
             Button(action: handleAnchorPrimaryAction) {
                 Label(controller.anchorPrimaryButtonTitle, systemImage: "anchor")
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
-            if controller.anchorMode == .freeSwinging,
-               controller.anchorReferenceCoordinate != nil {
-                Button("Update anchor position here", action: controller.markAnchorPosition)
-                    .font(.subheadline)
-            }
-
             if let message = controller.anchorActionMessage {
                 Label(message, systemImage: "info.circle.fill")
                     .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             }
         }
         .cardStyle()
@@ -340,12 +331,39 @@ struct ContentView: View {
 
     private var armedAnchorDashboard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                statusHeader(controller.anchorStatusTitle, color: anchorStatusColor)
-                Spacer()
-                Text(controller.anchorMode.displayName)
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+            AnchorDriftPlot(
+                points: controller.anchorTrackPoints,
+                limitMeters: controller.anchorRadiusMeters,
+                alarmTriggered: controller.anchorAlarmTriggered
+            )
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxHeight: 420)
+            .frame(maxWidth: .infinity)
+
+            if controller.isLayingAnchor {
+                Button(action: controller.armAnchorAlarm) {
+                    Label(
+                        controller.anchorReferenceCoordinate == nil
+                            ? "Acquiring anchor position…"
+                            : "Arm anchor alarm",
+                        systemImage: "bell.and.waves.left.and.right.fill"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(controller.anchorReferenceCoordinate == nil)
+            } else {
+                Button {
+                    showingDisarmConfirmation = true
+                } label: {
+                    Label("Disarm anchor watch", systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .controlSize(.large)
             }
 
             VStack(spacing: 2) {
@@ -365,14 +383,29 @@ struct ContentView: View {
                 radiusControl(title: "Swing radius", adjustableWhileArmed: true)
             }
 
-            AnchorDriftPlot(
-                points: controller.anchorTrackPoints,
-                limitMeters: controller.anchorRadiusMeters,
-                alarmTriggered: controller.anchorAlarmTriggered
-            )
-            .aspectRatio(1, contentMode: .fit)
-            .frame(maxHeight: 420)
-            .frame(maxWidth: .infinity)
+            if controller.isLayingAnchor {
+                Button(role: .cancel, action: controller.cancelAnchorSetup) {
+                    Label("Cancel anchoring", systemImage: "xmark.circle")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.bordered)
+            }
+
+            HStack(spacing: 10) {
+                statusHeader(controller.anchorStatusTitle, color: anchorStatusColor)
+                Spacer()
+                Text(controller.anchorMode.displayName)
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+
+            if controller.isLayingAnchor,
+               let message = controller.anchorActionMessage {
+                Label(message, systemImage: "info.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             HStack(spacing: 16) {
                 plotLegend(color: .blue, label: "GPS trail")
@@ -407,17 +440,9 @@ struct ContentView: View {
                 .controlSize(.large)
             }
 
-            Button {
-                showingDisarmConfirmation = true
-            } label: {
-                Label("Disarm anchor watch", systemImage: "stop.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.large)
-
-            Text("North-up • focused on the alarm boundary, current position, and recent trail. Isolated older GPS outliers do not shrink the plot.")
+            Text(controller.isLayingAnchor
+                ? "North-up • the trail begins at the anchor-drop point and updates while you pay out the rode. The alarm is not armed yet."
+                : "North-up • focused on the alarm boundary, current position, and recent trail. Isolated older GPS outliers do not shrink the plot.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -492,7 +517,7 @@ struct ContentView: View {
                 Image(systemName: shoreMonitorSymbol)
                     .foregroundStyle(shoreMonitorColor)
                     .accessibilityHidden(true)
-                Text("Shore monitor")
+                Text("Optional shore monitor")
                     .font(.headline)
                 Spacer()
                 Text(shoreMonitorStatus)
@@ -501,7 +526,7 @@ struct ContentView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Text("Pair one Android phone for remote alarm and connection-loss alerts.")
+            Text("Add an Android phone for backup remote and connection-loss alerts.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -510,7 +535,7 @@ struct ContentView: View {
                 showingAnchorPairing = true
             } label: {
                 Label(
-                    controller.shoreMonitorConnected ? "View pairing code" : "Pair shore monitor",
+                    controller.shoreMonitorConnected ? "View pairing code" : "Set up shore monitor",
                     systemImage: "qrcode"
                 )
             }
@@ -605,14 +630,7 @@ struct ContentView: View {
     }
 
     private func handleAnchorPrimaryAction() {
-        let actionWillArm = controller.anchorMode == .shorelined
-            || controller.anchorReferenceCoordinate != nil
-        if actionWillArm
-            && (!controller.shoreMonitorConnected || !controller.shoreMonitorSoundReady) {
-            showingDegradedArmWarning = true
-        } else {
-            controller.toggleAnchorAlarm()
-        }
+        controller.toggleAnchorAlarm()
     }
 
     private func instruction(_ number: Int, _ text: String) -> some View {
@@ -679,19 +697,21 @@ struct ContentView: View {
     }
 
     private var shoreMonitorStatus: String {
-        if !controller.shoreMonitorConnected { return "Not paired" }
-        return controller.shoreMonitorSoundReady ? "Connected · Sound ready" : "Connected · Setup needed"
+        if !controller.shoreMonitorConnected { return "Not paired · Optional" }
+        if controller.shoreMonitorSoundReady { return "Connected · Sound ready" }
+        return controller.anchorAlarmArmed ? "Connected · Setup needed" : "Connected"
     }
 
     private var shoreMonitorSymbol: String {
-        if !controller.shoreMonitorConnected { return "wifi.slash" }
+        if !controller.shoreMonitorConnected { return "iphone" }
         return controller.shoreMonitorSoundReady
-            ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
+            ? "checkmark.shield.fill" : "speaker.slash.fill"
     }
 
     private var shoreMonitorColor: Color {
         if !controller.shoreMonitorConnected { return .secondary }
-        return controller.shoreMonitorSoundReady ? .green : .orange
+        if controller.shoreMonitorSoundReady { return .green }
+        return controller.anchorAlarmArmed ? .orange : .secondary
     }
 }
 

@@ -47,6 +47,10 @@ public final class BridgeService extends Service implements LocationListener,
         NmeaTcpServer.Listener, AnchorSyncServer.Listener {
     static final String ACTION_START = "com.jaco.navionicsgpsbridge.START";
     static final String ACTION_STOP = "com.jaco.navionicsgpsbridge.STOP";
+    static final String ACTION_BEGIN_ANCHOR_SETUP =
+            "com.jaco.navionicsgpsbridge.BEGIN_ANCHOR_SETUP";
+    static final String ACTION_CANCEL_ANCHOR_SETUP =
+            "com.jaco.navionicsgpsbridge.CANCEL_ANCHOR_SETUP";
     static final String ACTION_ARM_ANCHOR = "com.jaco.navionicsgpsbridge.ARM_ANCHOR";
     static final String ACTION_DISARM_ANCHOR = "com.jaco.navionicsgpsbridge.DISARM_ANCHOR";
     static final String ACTION_SILENCE_ANCHOR = "com.jaco.navionicsgpsbridge.SILENCE_ANCHOR";
@@ -136,6 +140,7 @@ public final class BridgeService extends Service implements LocationListener,
     private volatile boolean foregroundActive;
     private boolean locationUpdatesRegistered;
     private boolean streaming;
+    private boolean anchorSetupActive;
     private boolean anchorAlarmArmed;
     private boolean anchorAlarmTriggered;
     private boolean anchorAlarmSilenced;
@@ -198,6 +203,10 @@ public final class BridgeService extends Service implements LocationListener,
         String action = intent.getAction();
         if (ACTION_STOP.equals(action)) {
             stopStreaming();
+        } else if (ACTION_BEGIN_ANCHOR_SETUP.equals(action)) {
+            beginAnchorSetup(intent);
+        } else if (ACTION_CANCEL_ANCHOR_SETUP.equals(action)) {
+            cancelAnchorSetup();
         } else if (ACTION_ARM_ANCHOR.equals(action)) {
             armAnchorAlarm(intent);
         } else if (ACTION_DISARM_ANCHOR.equals(action)) {
@@ -306,16 +315,23 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void loadAnchorConfiguration() {
+        boolean restoreArmed = preferences.getBoolean(KEY_ANCHOR_ARMED, false);
         synchronized (stateLock) {
             anchorMode = AnchorAlarm.Mode.fromStorageValue(
                     preferences.getString(KEY_ANCHOR_MODE, AnchorAlarm.Mode.SHORELINED.storageValue));
             anchorRadiusMeters = anchorMode.adjustedRadius(preferences.getFloat(
                     KEY_ANCHOR_RADIUS, (float) anchorMode.defaultRadiusMeters));
-            hasAnchorReference = preferences.getBoolean(KEY_HAS_ANCHOR_REFERENCE, false);
+            hasAnchorReference = restoreArmed
+                    && preferences.getBoolean(KEY_HAS_ANCHOR_REFERENCE, false);
+            anchorAlarmArmed = restoreArmed && hasAnchorReference;
+            anchorArmedElapsedMillis = SystemClock.elapsedRealtime();
             anchorReferenceLatitude = Double.longBitsToDouble(
                     preferences.getLong(KEY_ANCHOR_LATITUDE, Double.doubleToRawLongBits(0.0)));
             anchorReferenceLongitude = Double.longBitsToDouble(
                     preferences.getLong(KEY_ANCHOR_LONGITUDE, Double.doubleToRawLongBits(0.0)));
+        }
+        if (!restoreArmed) {
+            preferences.edit().putBoolean(KEY_HAS_ANCHOR_REFERENCE, false).apply();
         }
     }
 
@@ -365,6 +381,45 @@ public final class BridgeService extends Service implements LocationListener,
         emitState();
     }
 
+    private void beginAnchorSetup(Intent intent) {
+        AnchorAlarm.Mode mode = AnchorAlarm.Mode.fromStorageValue(
+                intent.getStringExtra(EXTRA_ANCHOR_MODE));
+        double radius = mode.adjustedRadius(intent.getDoubleExtra(
+                EXTRA_ANCHOR_RADIUS, mode.defaultRadiusMeters));
+        synchronized (stateLock) {
+            if (anchorAlarmArmed) return;
+            anchorSetupActive = true;
+            anchorMode = mode;
+            anchorRadiusMeters = radius;
+            hasAnchorReference = false;
+            anchorDistanceMeters = Double.NaN;
+            anchorTrackPoints.clear();
+            anchorAlertReason = null;
+            error = null;
+        }
+        anchorHistoryStore.startNewSession();
+        persistAnchorConfiguration(false);
+        ensureMonitoringInfrastructure();
+        emitState();
+        updateAnchorSyncState(true);
+    }
+
+    private void cancelAnchorSetup() {
+        synchronized (stateLock) {
+            if (!anchorSetupActive) return;
+            anchorSetupActive = false;
+            hasAnchorReference = false;
+            anchorDistanceMeters = Double.NaN;
+            anchorTrackPoints.clear();
+            anchorAlertReason = null;
+        }
+        anchorHistoryStore.startNewSession();
+        persistAnchorConfiguration(false);
+        stopMonitoringInfrastructureIfIdle();
+        emitState();
+        updateAnchorSyncState(true);
+    }
+
     private void armAnchorAlarm(Intent intent) {
         if (!hasFineLocationPermission()) {
             synchronized (stateLock) {
@@ -386,14 +441,21 @@ public final class BridgeService extends Service implements LocationListener,
             return;
         }
 
+        boolean wasLayingAnchor;
         synchronized (stateLock) {
+            wasLayingAnchor = anchorSetupActive
+                    && mode == AnchorAlarm.Mode.FREE_SWINGING
+                    && hasAnchorReference;
+            anchorSetupActive = false;
             anchorMode = mode;
             anchorRadiusMeters = radius;
             hasAnchorReference = true;
             anchorReferenceLatitude = latitude;
             anchorReferenceLongitude = longitude;
-            anchorDistanceMeters = Double.NaN;
-            anchorTrackPoints.clear();
+            if (!wasLayingAnchor) {
+                anchorDistanceMeters = Double.NaN;
+                anchorTrackPoints.clear();
+            }
             anchorAlarmArmed = true;
             anchorAlarmTriggered = false;
             anchorAlarmSilenced = false;
@@ -406,7 +468,7 @@ public final class BridgeService extends Service implements LocationListener,
             criticalBatteryEventIssued = false;
             error = null;
         }
-        anchorHistoryStore.startNewSession();
+        if (!wasLayingAnchor) anchorHistoryStore.startNewSession();
         persistAnchorConfiguration(true);
         stopAlarmPresentation();
         ensureMonitoringInfrastructure();
@@ -418,15 +480,21 @@ public final class BridgeService extends Service implements LocationListener,
 
     private void disarmAnchorAlarm() {
         synchronized (stateLock) {
+            anchorSetupActive = false;
             anchorAlarmArmed = false;
             anchorAlarmTriggered = false;
             anchorAlarmSilenced = false;
             anchorAlertReason = null;
+            hasAnchorReference = false;
             anchorDistanceMeters = Double.NaN;
+            anchorTrackPoints.clear();
             breachStartedElapsedMillis = 0L;
         }
         anchorEventStore.acknowledgeAll();
-        preferences.edit().putBoolean(KEY_ANCHOR_ARMED, false).apply();
+        preferences.edit()
+                .putBoolean(KEY_ANCHOR_ARMED, false)
+                .putBoolean(KEY_HAS_ANCHOR_REFERENCE, false)
+                .apply();
         stopAlarmPresentation();
         stopMonitoringInfrastructureIfIdle();
         emitState();
@@ -461,6 +529,7 @@ public final class BridgeService extends Service implements LocationListener,
             }
             if (anchorMode != mode) {
                 anchorMode = mode;
+                anchorSetupActive = false;
                 hasAnchorReference = false;
                 anchorDistanceMeters = Double.NaN;
                 anchorTrackPoints.clear();
@@ -469,7 +538,7 @@ public final class BridgeService extends Service implements LocationListener,
                 anchorRadiusMeters = mode.adjustedRadius(radiusMeters);
             }
         }
-        persistAnchorConfiguration(false);
+        persistAnchorConfiguration(adjustedWhileArmed);
         if (adjustedWhileArmed) {
             Location location = copyLatestLocation();
             if (location != null && fixAgeSeconds(location) <= STALE_FIX_SECONDS) {
@@ -484,6 +553,7 @@ public final class BridgeService extends Service implements LocationListener,
         if (!validCoordinate(latitude, longitude)) return;
         synchronized (stateLock) {
             if (anchorAlarmArmed) return;
+            anchorSetupActive = true;
             hasAnchorReference = true;
             anchorReferenceLatitude = latitude;
             anchorReferenceLongitude = longitude;
@@ -491,6 +561,9 @@ public final class BridgeService extends Service implements LocationListener,
             anchorTrackPoints.clear();
         }
         persistAnchorConfiguration(false);
+        ensureMonitoringInfrastructure();
+        Location location = copyLatestLocation();
+        if (location != null) evaluateAnchorPosition(location);
         emitState();
     }
 
@@ -506,7 +579,7 @@ public final class BridgeService extends Service implements LocationListener,
                     .putLong(KEY_ANCHOR_LONGITUDE,
                             Double.doubleToRawLongBits(anchorReferenceLongitude));
         }
-        if (armed) editor.putBoolean(KEY_ANCHOR_ARMED, true);
+        editor.putBoolean(KEY_ANCHOR_ARMED, armed);
         editor.apply();
     }
 
@@ -615,7 +688,7 @@ public final class BridgeService extends Service implements LocationListener,
         String reason = null;
         long now = SystemClock.elapsedRealtime();
         synchronized (stateLock) {
-            if (!anchorAlarmArmed || !hasAnchorReference) return;
+            if ((!anchorAlarmArmed && !anchorSetupActive) || !hasAnchorReference) return;
             AnchorAlarm.Offset offset = AnchorAlarm.plotOffsetMeters(
                     anchorReferenceLatitude,
                     anchorReferenceLongitude,
@@ -637,6 +710,8 @@ public final class BridgeService extends Service implements LocationListener,
                     location.getAccuracy(),
                     anchorRadiusMeters);
             anchorDistanceMeters = assessment.distanceMeters;
+
+            if (!anchorAlarmArmed) return;
 
             if (!assessment.definitelyOutside) {
                 breachStartedElapsedMillis = 0L;
@@ -921,6 +996,7 @@ public final class BridgeService extends Service implements LocationListener,
                     location == null || !location.hasSpeed() ? -1.0 : location.getSpeed(),
                     location == null || !location.hasBearing() ? -1.0 : location.getBearing(),
                     location == null ? Double.POSITIVE_INFINITY : fixAgeSeconds(location),
+                    location == null ? 0L : location.getElapsedRealtimeNanos(),
                     clientCount,
                     udpBroadcastAddresses.size(),
                     listenerDescription,
@@ -928,6 +1004,7 @@ public final class BridgeService extends Service implements LocationListener,
                     lastSentences,
                     error,
                     anchorMode,
+                    anchorSetupActive,
                     anchorAlarmArmed,
                     anchorAlarmTriggered,
                     anchorAlarmSilenced,
@@ -967,7 +1044,7 @@ public final class BridgeService extends Service implements LocationListener,
 
     private boolean isMonitoringRequired() {
         synchronized (stateLock) {
-            return streaming || anchorAlarmArmed;
+            return streaming || anchorAlarmArmed || anchorSetupActive;
         }
     }
 
@@ -1030,6 +1107,11 @@ public final class BridgeService extends Service implements LocationListener,
         } else if (state.anchorAlarmArmed) {
             builder.setContentTitle("Anchor alarm armed • " + state.anchorMode.displayName)
                     .setContentText(anchorNotificationText(state));
+        } else if (state.anchorSetupActive) {
+            builder.setContentTitle("Laying anchor")
+                    .setContentText(state.hasAnchorReference
+                            ? anchorNotificationText(state)
+                            : "Acquiring the anchor-drop position");
         } else {
             builder.setContentTitle("GPS to Navionics is running")
                     .setContentText(streamingNotificationText(state));
@@ -1050,6 +1132,14 @@ public final class BridgeService extends Service implements LocationListener,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             builder.addAction(new Notification.Action.Builder(
                     null, "Disarm anchor", disarmPendingIntent).build());
+        } else if (state.anchorSetupActive) {
+            Intent cancelIntent = new Intent(this, BridgeService.class)
+                    .setAction(ACTION_CANCEL_ANCHOR_SETUP);
+            PendingIntent cancelPendingIntent = PendingIntent.getService(
+                    this, 2, cancelIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            builder.addAction(new Notification.Action.Builder(
+                    null, "Cancel anchoring", cancelPendingIntent).build());
         }
         return builder.build();
     }
