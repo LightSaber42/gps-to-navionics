@@ -5,6 +5,7 @@ struct AnchorPairingView: View {
     let pairingURL: URL?
     let monitorConnected: Bool
     let monitorSoundReady: Bool
+    let refreshPairing: () -> Void
     let rotatePairing: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -15,6 +16,8 @@ struct AnchorPairingView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
+                    remoteAccessWarning
+
                     Text("On the Android shore phone, scan this code with its Camera app. The GPS bridge opens automatically in read-only monitor mode.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -87,6 +90,63 @@ struct AnchorPairingView: View {
             }
         }
     }
+
+    private var remoteAccessWarning: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Remote monitoring requires a VPN", systemImage: "lock.shield.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+            Text("Before pairing for remote use, install Tailscale on both phones, sign in to the same Tailscale network, and connect it. Pairing alone does not provide internet access. Without Tailscale or an equivalent VPN setup, monitoring works only on the same local network.")
+                .font(.subheadline)
+
+            Label(remoteAccessStatusText, systemImage: remoteAccessStatusSymbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(includesTailscaleAddress ? .green : .orange)
+
+            Link(destination: Self.tailscaleSetupURL) {
+                Label("Tailscale setup instructions", systemImage: "arrow.up.right.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Button(action: refreshPairing) {
+                Label("Refresh after connecting VPN", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+        }
+    }
+
+    private var includesTailscaleAddress: Bool {
+        guard let pairingURL,
+              let components = URLComponents(url: pairingURL, resolvingAgainstBaseURL: false),
+              let hosts = components.queryItems?.first(where: { $0.name == "hosts" })?.value else {
+            return false
+        }
+        return hosts.split(separator: ",").contains { $0.hasPrefix("100.") }
+    }
+
+    private var remoteAccessStatusText: String {
+        if includesTailscaleAddress {
+            return "Tailscale address included. Keep Tailscale connected on both phones."
+        }
+        return "No Tailscale address detected. Unless another included address is from your VPN, this code is local-network only."
+    }
+
+    private var remoteAccessStatusSymbol: String {
+        includesTailscaleAddress ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private static let tailscaleSetupURL = URL(string: "https://tailscale.com/docs/how-to/quickstart")!
 
     private var statusText: String {
         if !monitorConnected { return "Not paired · Waiting for shore monitor" }

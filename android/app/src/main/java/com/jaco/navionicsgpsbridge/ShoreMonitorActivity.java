@@ -36,6 +36,8 @@ import java.util.Locale;
 public final class ShoreMonitorActivity extends Activity
         implements ShoreMonitorService.StateListener {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 81;
+    private static final Uri TAILSCALE_SETUP_URI =
+            Uri.parse("https://tailscale.com/docs/how-to/quickstart");
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -151,6 +153,25 @@ public final class ShoreMonitorActivity extends Activity
         readinessValue = detail(statusCard, "Alarm sound", "Needs setup");
         heartbeatValue = detail(statusCard, "Last heartbeat", "—");
         page.addView(statusCard, cardParams());
+
+        LinearLayout remoteAccessCard = warningCard();
+        TextView remoteAccessTitle = text(
+                "Remote monitoring requires a VPN", 18, R.color.nav_warning);
+        remoteAccessTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        remoteAccessCard.addView(remoteAccessTitle, matchWrap());
+        TextView remoteAccessHelp = text(
+                "Before pairing for remote use, install Tailscale on both phones, sign in to the same Tailscale network, and connect it. Pairing alone does not provide internet access. Without Tailscale or an equivalent VPN setup, monitoring works only on the same local network.",
+                14,
+                R.color.nav_text);
+        LinearLayout.LayoutParams remoteAccessHelpParams = matchWrap();
+        remoteAccessHelpParams.topMargin = dp(8);
+        remoteAccessCard.addView(remoteAccessHelp, remoteAccessHelpParams);
+        Button tailscaleSetup = button("Tailscale setup instructions", R.color.nav_blue_dark);
+        tailscaleSetup.setOnClickListener(view -> openTailscaleSetup());
+        LinearLayout.LayoutParams tailscaleSetupParams = matchWrap();
+        tailscaleSetupParams.topMargin = dp(12);
+        remoteAccessCard.addView(tailscaleSetup, tailscaleSetupParams);
+        page.addView(remoteAccessCard, cardParams());
 
         alarmCard = card();
         TextView alarmHeader = text("Alarm state", 13, R.color.nav_secondary);
@@ -310,10 +331,20 @@ public final class ShoreMonitorActivity extends Activity
 
     private void pair(Uri uri) {
         try {
+            AnchorPairingStore.MonitorConfiguration configuration =
+                    AnchorPairingStore.parsePairingUri(uri);
             new AnchorPairingStore(this).saveMonitor(uri);
             ShoreMonitorService.start(this);
-            Toast.makeText(this, "Paired with the boat device", Toast.LENGTH_LONG).show();
+            boolean includesTailscaleAddress = configuration.hosts.stream()
+                    .anyMatch(host -> host.startsWith("100."));
+            Toast.makeText(
+                    this,
+                    includesTailscaleAddress
+                            ? "Paired. Keep Tailscale connected for remote monitoring."
+                            : "Paired, but no Tailscale address was detected.",
+                    Toast.LENGTH_LONG).show();
             if (binder != null) binder.reconnectNow();
+            if (!includesTailscaleAddress) showRemoteAccessWarning();
         } catch (GeneralSecurityException | IllegalArgumentException error) {
             new AlertDialog.Builder(this)
                     .setTitle("Pairing link not accepted")
@@ -321,6 +352,19 @@ public final class ShoreMonitorActivity extends Activity
                     .setPositiveButton("OK", null)
                     .show();
         }
+    }
+
+    private void showRemoteAccessWarning() {
+        new AlertDialog.Builder(this)
+                .setTitle("Remote access is not set up")
+                .setMessage("This pairing code has no Tailscale address. Unless one of its addresses belongs to another VPN, monitoring will work only on the same local network. Set up a VPN on both phones, then create and scan a new pairing code.")
+                .setNegativeButton("Continue locally", null)
+                .setPositiveButton("Tailscale instructions", (dialog, which) -> openTailscaleSetup())
+                .show();
+    }
+
+    private void openTailscaleSetup() {
+        startActivity(new Intent(Intent.ACTION_VIEW, TAILSCALE_SETUP_URI));
     }
 
     private boolean hasStoredPairing() {
@@ -350,6 +394,18 @@ public final class ShoreMonitorActivity extends Activity
         background.setCornerRadius(dp(16));
         card.setBackground(background);
         card.setElevation(dp(2));
+        return card;
+    }
+
+    private LinearLayout warningCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_warning_surface));
+        background.setCornerRadius(dp(16));
+        background.setStroke(dp(1), getColor(R.color.nav_warning));
+        card.setBackground(background);
         return card;
     }
 

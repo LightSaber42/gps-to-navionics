@@ -573,7 +573,7 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout card = card();
         addCardHeader(card, "Optional shore monitor");
         TextView description = text(
-                "Add an Android phone for backup remote and connection-loss alerts.",
+                "Add an Android phone for backup remote and connection-loss alerts. Remote use requires Tailscale or another VPN on both phones.",
                 13,
                 R.color.nav_secondary);
         description.setLineSpacing(0.0f, 1.12f);

@@ -28,6 +28,9 @@ import java.util.List;
 
 /** QR/manual credentials for pairing one read-only shore monitor. */
 public final class AnchorPairingActivity extends Activity implements BridgeService.StateListener {
+    private static final Uri TAILSCALE_SETUP_URI =
+            Uri.parse("https://tailscale.com/docs/how-to/quickstart");
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -49,6 +52,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
     private TextView pairingLinkValue;
     private TextView errorValue;
     private TextView monitorStatusValue;
+    private TextView remoteAccessStatusValue;
     private Uri pairingUri;
 
     @Override
@@ -134,6 +138,30 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         subtitleParams.topMargin = dp(6);
         subtitleParams.bottomMargin = dp(18);
         page.addView(subtitle, subtitleParams);
+
+        LinearLayout remoteAccessCard = warningCard();
+        TextView remoteAccessTitle = text(
+                "Remote monitoring requires a VPN", 18, R.color.nav_warning);
+        remoteAccessTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        remoteAccessCard.addView(remoteAccessTitle, matchWrap());
+        TextView remoteAccessHelp = text(
+                "Before pairing for remote use, install Tailscale on both phones, sign in to the same Tailscale network, and connect it. Pairing alone does not provide internet access. Without Tailscale or an equivalent VPN setup, monitoring works only on the same local network.",
+                14,
+                R.color.nav_text);
+        LinearLayout.LayoutParams remoteAccessHelpParams = matchWrap();
+        remoteAccessHelpParams.topMargin = dp(8);
+        remoteAccessCard.addView(remoteAccessHelp, remoteAccessHelpParams);
+        remoteAccessStatusValue = text("", 14, R.color.nav_warning);
+        remoteAccessStatusValue.setTypeface(Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams remoteAccessStatusParams = matchWrap();
+        remoteAccessStatusParams.topMargin = dp(10);
+        remoteAccessCard.addView(remoteAccessStatusValue, remoteAccessStatusParams);
+        Button tailscaleSetup = button("Tailscale setup instructions", R.color.nav_blue_dark);
+        tailscaleSetup.setOnClickListener(view -> openTailscaleSetup());
+        LinearLayout.LayoutParams tailscaleSetupParams = matchWrap();
+        tailscaleSetupParams.topMargin = dp(12);
+        remoteAccessCard.addView(tailscaleSetup, tailscaleSetupParams);
+        page.addView(remoteAccessCard, cardParams());
 
         LinearLayout card = card();
         monitorStatusValue = text("Not paired · Waiting for shore monitor", 14, R.color.nav_secondary);
@@ -222,6 +250,9 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 qrView.setImageDrawable(null);
                 addressValue.setText("No LAN or Tailscale IPv4 address available");
                 errorValue.setText("Connect both phones to the same subnet or Tailscale, then refresh.");
+                remoteAccessStatusValue.setText(
+                        "No Tailscale address detected. This code would be local-network only.");
+                remoteAccessStatusValue.setTextColor(getColor(R.color.nav_warning));
                 return;
             }
             pairingUri = pairingStore.pairingUri(configuration, addresses);
@@ -235,6 +266,13 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 addressText.append(addresses.get(index).address);
             }
             addressValue.setText(addressText.toString());
+            boolean includesTailscaleAddress = addresses.stream()
+                    .anyMatch(address -> address.address.startsWith("100."));
+            remoteAccessStatusValue.setText(includesTailscaleAddress
+                    ? "Tailscale address included. Keep Tailscale connected on both phones."
+                    : "No Tailscale address detected. Unless another listed address is from your VPN, this code is local-network only.");
+            remoteAccessStatusValue.setTextColor(getColor(includesTailscaleAddress
+                    ? R.color.nav_success : R.color.nav_warning));
             errorValue.setText("");
         } catch (GeneralSecurityException | WriterException error) {
             qrView.setImageDrawable(null);
@@ -249,6 +287,10 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 .putExtra(Intent.EXTRA_TEXT, pairingUri.toString())
                 .putExtra(Intent.EXTRA_SUBJECT, "Anchor monitor pairing");
         startActivity(Intent.createChooser(share, "Share pairing link"));
+    }
+
+    private void openTailscaleSetup() {
+        startActivity(new Intent(Intent.ACTION_VIEW, TAILSCALE_SETUP_URI));
     }
 
     private void confirmRotate() {
@@ -279,6 +321,18 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         background.setCornerRadius(dp(16));
         card.setBackground(background);
         card.setElevation(dp(2));
+        return card;
+    }
+
+    private LinearLayout warningCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_warning_surface));
+        background.setCornerRadius(dp(16));
+        background.setStroke(dp(1), getColor(R.color.nav_warning));
+        card.setBackground(background);
         return card;
     }
 

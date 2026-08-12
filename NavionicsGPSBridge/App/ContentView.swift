@@ -39,6 +39,7 @@ struct ContentView: View {
                     pairingURL: controller.anchorPairingURL,
                     monitorConnected: controller.shoreMonitorConnected,
                     monitorSoundReady: controller.shoreMonitorSoundReady,
+                    refreshPairing: controller.refreshAnchorPairing,
                     rotatePairing: controller.rotateAnchorPairing
                 )
             }
@@ -529,7 +530,7 @@ struct ContentView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Text("Add an Android phone for backup remote and connection-loss alerts.")
+            Text("Add an Android phone for backup remote and connection-loss alerts. Remote use requires Tailscale or another VPN on both phones.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -560,6 +561,9 @@ struct ContentView: View {
                     detailRow("Distance from reference", controller.anchorDistanceDescription)
                 }
                 Text("A drift must remain outside the radius for 5 seconds. GPS loss alerts after 30 seconds; while locked, the alarm notification repeats every minute until silenced.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("After force-quitting or restarting this iPhone, reopen the app and re-arm the watch. Test alarm sound with your mute and Focus settings before relying on it.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
