@@ -26,6 +26,8 @@
 		C10000000000000000000007 /* AnchorSyncServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* AnchorSyncServer.swift */; };
 		C10000000000000000000008 /* AnchorSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* AnchorSyncTests.swift */; };
 		C10000000000000000000009 /* AnchorPairingAddressProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AnchorPairingAddressProvider.swift */; };
+		D10000000000000000000001 /* EntitlementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* EntitlementPolicyTests.swift */; };
+		D10000000000000000000002 /* EntitlementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* EntitlementPolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +63,8 @@
 		C20000000000000000000007 /* AnchorSyncServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncServer.swift; sourceTree = "<group>"; };
 		C20000000000000000000008 /* AnchorSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorSyncTests.swift; sourceTree = "<group>"; };
 		C20000000000000000000009 /* AnchorPairingAddressProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnchorPairingAddressProvider.swift; sourceTree = "<group>"; };
+		D20000000000000000000001 /* EntitlementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicyTests.swift; sourceTree = "<group>"; };
+		D20000000000000000000002 /* EntitlementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +113,7 @@
 				C20000000000000000000002 /* AnchorHistoryStore.swift */,
 				C20000000000000000000003 /* AnchorEventLog.swift */,
 				C20000000000000000000001 /* AnchorPairingView.swift */,
+				D20000000000000000000002 /* EntitlementPolicy.swift */,
 				B20000000000000000000002 /* BridgeController.swift */,
 				B20000000000000000000003 /* ContentView.swift */,
 			);
@@ -144,6 +149,7 @@
 				B20000000000000000000009 /* NMEAEncoderTests.swift */,
 				B2000000000000000000000D /* AnchorAlarmTests.swift */,
 				C20000000000000000000008 /* AnchorSyncTests.swift */,
+				D20000000000000000000001 /* EntitlementPolicyTests.swift */,
 			);
 			path = NavionicsGPSBridgeTests;
 			sourceTree = "<group>";
@@ -271,6 +277,7 @@
 				C10000000000000000000006 /* AnchorPairingStore.swift in Sources */,
 				C10000000000000000000007 /* AnchorSyncServer.swift in Sources */,
 				C10000000000000000000009 /* AnchorPairingAddressProvider.swift in Sources */,
+				D10000000000000000000002 /* EntitlementPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -281,6 +288,7 @@
 				B10000000000000000000008 /* NMEAEncoderTests.swift in Sources */,
 				B1000000000000000000000A /* AnchorAlarmTests.swift in Sources */,
 				C10000000000000000000008 /* AnchorSyncTests.swift in Sources */,
+				D10000000000000000000001 /* EntitlementPolicyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -41,7 +41,7 @@ This document is the implementation and submission checklist for repositioning t
 - [x] First arming will require one concise acknowledgement that the app is an auxiliary aid, not the sole vessel watch or navigation system.
 - [x] Apply for Apple Critical Alerts, but do not block 2.0 on approval and do not claim Focus/mute override until approved.
 - [x] Preserve and integrate the in-progress degraded-GPS-precision warning currently present in the worktree.
-- [ ] Add deterministic tests for entitlement evaluation, offline cache, expiry/revocation, and active-session continuity.
+- [x] Add deterministic tests for entitlement evaluation, offline cache, expiry/revocation, and active-session continuity.
 - [ ] Add deterministic tests for metres/feet conversions and formatting.
 - [ ] Add purchase/restore/expiry physical-device test cases to the release checklist.
 
@@ -58,10 +58,10 @@ This document is the implementation and submission checklist for repositioning t
 
 ## 2. Shared commercial model
 
-- [ ] Define `free`, `anchorWatch`, and `remoteAnchorWatch` feature levels on both platforms.
-- [ ] Define stable product identifiers and document the App Store Connect/Play Console mapping.
-- [ ] Implement a pure entitlement evaluator with store status, last validation time, seven-day offline policy, and revocation handling.
-- [ ] Implement a session entitlement lease so an armed session remains enabled until disarm.
+- [x] Define `free`, `anchorWatch`, and `remoteAnchorWatch` feature levels on both platforms.
+- [x] Define stable product identifiers and document the App Store Connect/Play Console mapping.
+- [x] Implement a pure entitlement evaluator with store status, last validation time, seven-day offline policy, and revocation handling.
+- [x] Implement a session entitlement lease so an armed session remains enabled until disarm.
 - [ ] Gate anchor arming/setup/history behind Anchor Watch without hiding the anchor-first product introduction.
 - [ ] Gate pairing-code creation, sync-server availability, and new remote sessions behind Remote Anchor Watch.
 - [ ] Preserve stored pairing when remote entitlement becomes inactive.
