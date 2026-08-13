@@ -265,6 +265,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             for (AnchorSyncProtocol.Point point : history.points) {
                 if (point.sequence > currentLast) historyPoints.add(point);
             }
+            AnchorHistoryCompactor.compactIfNeeded(historyPoints);
             after = historyPoints.isEmpty()
                     ? 0L : historyPoints.get(historyPoints.size() - 1).sequence;
             requestNext = historyVisible && !history.complete;
@@ -553,9 +554,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     private ShoreMonitorState snapshot() {
         synchronized (lock) {
             List<BridgeState.AnchorTrackPoint> rendered = new ArrayList<>();
-            int first = Math.max(0, historyPoints.size() - 1_200);
-            for (int index = first; index < historyPoints.size(); index++) {
-                AnchorSyncProtocol.Point point = historyPoints.get(index);
+            for (AnchorSyncProtocol.Point point : historyPoints) {
                 rendered.add(new BridgeState.AnchorTrackPoint(
                         point.eastMeters, point.northMeters, point.accuracyMeters));
             }

@@ -2,6 +2,7 @@ package com.jaco.navionicsgpsbridge;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.AtomicFile;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -9,9 +10,12 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -25,16 +29,19 @@ final class AnchorHistoryStore {
 
     private final SharedPreferences preferences;
     private final File file;
+    private final AtomicFile atomicFile;
     private final List<AnchorSyncProtocol.Point> points = new ArrayList<>();
     private String sessionId;
     private long nextSequence;
     private long lastRecordedAtMillis;
+    private boolean needsRewrite;
 
     AnchorHistoryStore(Context context) {
         preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
         File directory = new File(context.getFilesDir(), "anchor-watch");
         if (!directory.exists()) directory.mkdirs();
         file = new File(directory, "current-history.ndjson");
+        atomicFile = new AtomicFile(file);
         sessionId = preferences.getString(KEY_SESSION_ID, null);
         nextSequence = Math.max(1L, preferences.getLong(KEY_NEXT_SEQUENCE, 1L));
         load();
@@ -45,12 +52,7 @@ final class AnchorHistoryStore {
         nextSequence = 1L;
         lastRecordedAtMillis = 0L;
         points.clear();
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
-            // Truncate the previous session only after the user explicitly arms a new one.
-            writer.flush();
-        } catch (IOException ignored) {
-            // In-memory plotting and alarm monitoring remain available.
-        }
+        needsRewrite = !rewriteFile();
         persistMetadata();
         return sessionId;
     }
@@ -68,11 +70,11 @@ final class AnchorHistoryStore {
                 Math.max(0.0, accuracyMeters));
         points.add(point);
         lastRecordedAtMillis = recordedAtMillis;
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-            writer.write(point.toJson().toString());
-            writer.newLine();
-        } catch (IOException | JSONException ignored) {
-            // A future point may succeed; do not interrupt the safety alarm.
+        if (AnchorHistoryCompactor.compactIfNeeded(points)) needsRewrite = true;
+        if (needsRewrite) {
+            needsRewrite = !rewriteFile();
+        } else {
+            needsRewrite = !appendToFile(point);
         }
         persistMetadata();
         return point;
@@ -87,8 +89,7 @@ final class AnchorHistoryStore {
     }
 
     synchronized List<AnchorSyncProtocol.Point> renderedPoints() {
-        int first = Math.max(0, points.size() - 1_200);
-        return new ArrayList<>(points.subList(first, points.size()));
+        return new ArrayList<>(points);
     }
 
     synchronized List<AnchorSyncProtocol.Point> pageAfter(long sequence, int limit) {
@@ -107,8 +108,9 @@ final class AnchorHistoryStore {
     }
 
     private void load() {
-        if (!file.isFile()) return;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+        try (FileInputStream input = atomicFile.openRead();
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(input, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;
@@ -125,6 +127,40 @@ final class AnchorHistoryStore {
             AnchorSyncProtocol.Point last = points.get(points.size() - 1);
             nextSequence = Math.max(nextSequence, last.sequence + 1L);
             lastRecordedAtMillis = last.recordedAtMillis;
+        }
+        if (AnchorHistoryCompactor.compactIfNeeded(points)) {
+            needsRewrite = !rewriteFile();
+        }
+    }
+
+    private boolean appendToFile(AnchorSyncProtocol.Point point) {
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                new FileOutputStream(file, true), StandardCharsets.UTF_8))) {
+            writer.write(point.toJson().toString());
+            writer.newLine();
+            return true;
+        } catch (IOException | JSONException ignored) {
+            // A future point retries the complete history; do not interrupt the safety alarm.
+            return false;
+        }
+    }
+
+    private boolean rewriteFile() {
+        FileOutputStream output = null;
+        try {
+            output = atomicFile.startWrite();
+            BufferedWriter writer = new BufferedWriter(
+                    new OutputStreamWriter(output, StandardCharsets.UTF_8));
+            for (AnchorSyncProtocol.Point point : points) {
+                writer.write(point.toJson().toString());
+                writer.newLine();
+            }
+            writer.flush();
+            atomicFile.finishWrite(output);
+            return true;
+        } catch (IOException | JSONException ignored) {
+            if (output != null) atomicFile.failWrite(output);
+            return false;
         }
     }
 

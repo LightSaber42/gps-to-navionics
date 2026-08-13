@@ -4,6 +4,70 @@ import XCTest
 @testable import NavionicsGPSBridge
 
 final class AnchorSyncTests: XCTestCase {
+    @MainActor
+    func testAnchorHistoryProgressivelyCompactsAndPersists() throws {
+        let suiteName = "AnchorHistoryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(suiteName, isDirectory: true)
+        let fileURL = directory.appendingPathComponent("history.ndjson")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        var store: AnchorHistoryStore? = AnchorHistoryStore(
+            defaults: defaults,
+            fileURL: fileURL
+        )
+        _ = store?.startNewSession()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        for sequence in 1...1_024 {
+            XCTAssertNotNil(store?.append(
+                eastMeters: Double(sequence),
+                northMeters: 0,
+                accuracyMeters: 3,
+                recordedAt: start.addingTimeInterval(Double(sequence * 5))
+            ))
+        }
+
+        XCTAssertEqual(store?.points.count, 513)
+        XCTAssertEqual(store?.points.first?.sequence, 1)
+        XCTAssertEqual(store?.points.last?.sequence, 1_024)
+        XCTAssertEqual(store?.points.prefix(3).map(\.sequence), [1, 2, 4])
+
+        for sequence in 1_025...1_545 {
+            _ = store?.append(
+                eastMeters: Double(sequence),
+                northMeters: 0,
+                accuracyMeters: 3,
+                recordedAt: start.addingTimeInterval(Double(sequence * 5))
+            )
+        }
+        XCTAssertLessThan(try XCTUnwrap(store?.points.count), AnchorHistoryStore.maximumPointCount)
+        XCTAssertEqual(store?.points.first?.sequence, 1)
+        XCTAssertEqual(store?.points.last?.sequence, 1_545)
+        XCTAssertEqual(store?.points.suffix(10).map(\.sequence), Array(1_536...1_545))
+        XCTAssertEqual(store?.renderedPoints.count, store?.points.count)
+
+        store = nil
+        let restored = AnchorHistoryStore(defaults: defaults, fileURL: fileURL)
+        XCTAssertEqual(restored.points.first?.sequence, 1)
+        XCTAssertEqual(restored.points.last?.sequence, 1_545)
+        XCTAssertNil(restored.append(
+            eastMeters: 0,
+            northMeters: 0,
+            accuracyMeters: 3,
+            recordedAt: start.addingTimeInterval(Double(1_545 * 5 + 1))
+        ))
+        XCTAssertEqual(restored.append(
+            eastMeters: 0,
+            northMeters: 0,
+            accuracyMeters: 3,
+            recordedAt: start.addingTimeInterval(Double(1_546 * 5))
+        )?.sequence, 1_546)
+    }
+
     func testEncryptedFrameRoundTripsAndCarriesSequence() throws {
         let pairingKey = Data(repeating: 0x41, count: AnchorSyncCrypto.pairingKeyBytes)
         let clientNonce = Data(repeating: 0x42, count: AnchorSyncCrypto.nonceBytes)
