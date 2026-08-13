@@ -59,6 +59,17 @@ final class BridgeController: NSObject, ObservableObject,
     private static let maximumAnchorReferenceAccuracyMeters = 15.0
     private static let lostFixAlarmSeconds: TimeInterval = 30
     private static let breachConfirmationSeconds: TimeInterval = 5
+
+    private static func effectiveEntitlementDecision(
+        _ decision: EntitlementDecision
+    ) -> EntitlementDecision {
+#if DEBUG
+        EntitlementDecision(featureLevel: .remoteAnchorWatch)
+#else
+        decision
+#endif
+    }
+
     private let locationManager = CLLocationManager()
     private let server = NMEATCPServer()
     private let anchorSyncServer = AnchorSyncServer()
@@ -85,10 +96,12 @@ final class BridgeController: NSObject, ObservableObject,
     override init() {
         authorizationStatus = locationManager.authorizationStatus
         let entitlementCache = EntitlementCacheStore().load()
-        entitlementDecision = EntitlementPolicy.evaluate(
-            anchorWatch: entitlementCache.unavailableEvidence(for: .anchorWatch),
-            remoteAnchorWatch: entitlementCache.unavailableEvidence(for: .remoteAnchorWatch),
-            at: Date()
+        entitlementDecision = Self.effectiveEntitlementDecision(
+            EntitlementPolicy.evaluate(
+                anchorWatch: entitlementCache.unavailableEvidence(for: .anchorWatch),
+                remoteAnchorWatch: entitlementCache.unavailableEvidence(for: .remoteAnchorWatch),
+                at: Date()
+            )
         )
         super.init()
 
@@ -333,14 +346,15 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func updateEntitlementDecision(_ decision: EntitlementDecision) {
-        entitlementDecision = decision
+        let effectiveDecision = Self.effectiveEntitlementDecision(decision)
+        entitlementDecision = effectiveDecision
         if anchorAlarmArmed,
            let sessionID = anchorHistoryStore.sessionID,
            let currentLease = sessionEntitlementLease,
            let upgradedLease = EntitlementSessionAccess.upgradedLease(
                 currentLease,
                 activeSessionID: sessionID,
-                decision: decision,
+                decision: effectiveDecision,
                 at: Date()
            ),
            sessionLeaseStore.save(upgradedLease) {
