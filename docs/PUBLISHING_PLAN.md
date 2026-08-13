@@ -69,26 +69,26 @@ This document is the implementation and submission checklist for repositioning t
 
 ## 3. iOS purchases and entitlement state
 
-- [ ] Add StoreKit 2 product loading for the Anchor Watch non-consumable and monthly/annual Remote subscriptions.
-- [ ] Observe transaction updates and current entitlements using verified StoreKit transactions.
-- [ ] Finish and persist verified transactions appropriately.
+- [x] Add StoreKit 2 product loading for the Anchor Watch non-consumable and monthly/annual Remote subscriptions.
+- [x] Observe transaction updates and current entitlements using verified StoreKit transactions.
+- [x] Finish and persist verified transactions appropriately.
 - [ ] Implement purchase, restore/sync, pending, cancelled, failure, refund/revocation, expiration, and billing-retry UI states.
-- [ ] Cache only the minimum entitlement metadata needed for safe offline evaluation.
+- [x] Cache only the minimum entitlement metadata needed for safe offline evaluation.
 - [ ] Add a StoreKit configuration file for deterministic local purchase tests without changing Release behavior.
 - [ ] Add `Manage Subscription`, `Restore Purchases`, privacy, terms, and support links.
 - [ ] Ensure dynamic localized store prices are used; never hard-code checkout prices in UI.
 
 ## 4. Android purchases and entitlement state
 
-- [ ] Add the current supported Google Play Billing dependency to Gradle.
-- [ ] Update the manual debug build or replace it with a reproducible supported Gradle wrapper flow so billing builds can still be verified locally.
-- [ ] Connect/reconnect BillingClient safely and query product details plus existing purchases.
-- [ ] Enable and handle pending purchases.
-- [ ] Verify product IDs, purchase state, acknowledgement, cancellation, errors, and subscription changes.
-- [ ] Acknowledge completed purchases within Google Play's required window.
-- [ ] Persist only minimum entitlement/cache metadata and enforce the seven-day offline rule.
+- [x] Add the current supported Google Play Billing dependency to Gradle.
+- [x] Update the manual debug build or replace it with a reproducible supported Gradle wrapper flow so billing builds can still be verified locally.
+- [x] Connect/reconnect BillingClient safely and query product details plus existing purchases.
+- [x] Enable and handle pending purchases.
+- [x] Verify product IDs, purchase state, acknowledgement, cancellation, errors, and subscription changes.
+- [x] Acknowledge completed purchases within Google Play's required window.
+- [x] Persist only minimum entitlement/cache metadata and enforce the seven-day offline rule.
 - [ ] Add restore/refresh and Play subscription-management actions.
-- [ ] Ensure the free shore-monitor path never invokes or requires billing.
+- [x] Ensure the free shore-monitor path never invokes or requires billing.
 
 ## 5. Anchor-first information architecture
 

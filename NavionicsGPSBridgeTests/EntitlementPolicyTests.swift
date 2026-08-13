@@ -186,4 +186,44 @@ final class EntitlementPolicyTests: XCTestCase {
             "com.jaco.navionicsgpsbridge.remote.annual"
         )
     }
+
+    func testEntitlementCachePersistsOnlyMinimumValidationEvidence() throws {
+        let suiteName = "EntitlementCacheTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let validation = Date(timeIntervalSince1970: 1_000_000)
+        let expiration = validation.addingTimeInterval(24 * 60 * 60)
+        var cache = EntitlementCache()
+        cache.recordActive(.anchorWatch, at: validation)
+        cache.recordActive(.remoteAnchorWatch, at: validation, expiration: expiration)
+
+        EntitlementCacheStore(defaults: defaults).save(cache)
+        let restored = EntitlementCacheStore(defaults: defaults).load()
+
+        XCTAssertEqual(restored.anchorLastValidatedActiveAt, validation)
+        XCTAssertEqual(restored.remoteLastValidatedActiveAt, validation)
+        XCTAssertEqual(restored.remoteKnownExpirationAt, expiration)
+        XCTAssertFalse(restored.remoteKnownRevoked)
+    }
+
+    func testAuthoritativeInactiveRemoteStateCannotResurrectFromCache() {
+        let validation = Date(timeIntervalSince1970: 1_000_000)
+        let expiration = validation.addingTimeInterval(60)
+        var cache = EntitlementCache()
+        cache.recordActive(.remoteAnchorWatch, at: validation, expiration: expiration)
+
+        cache.recordInactive(
+            .remoteAnchorWatch,
+            knownExpirationAt: expiration,
+            knownRevoked: true
+        )
+        let evidence = cache.unavailableEvidence(for: .remoteAnchorWatch)
+
+        XCTAssertNil(evidence.lastValidatedActiveAt)
+        XCTAssertEqual(evidence.knownExpirationAt, expiration)
+        XCTAssertTrue(evidence.isKnownRevoked)
+        XCTAssertEqual(evidence.storeStatus, .unavailable)
+    }
 }

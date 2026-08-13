@@ -37,7 +37,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public final class MainActivity extends Activity implements BridgeService.StateListener {
+public final class MainActivity extends Activity implements
+        BridgeService.StateListener,
+        PlayBillingStore.Listener {
     private static final int PERMISSION_REQUEST = 42;
     private static final double STALE_FIX_SECONDS = 10.0;
     private static final double MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS = 15.0;
@@ -71,6 +73,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     };
 
     private BridgeService.LocalBinder binder;
+    private PlayBillingStore billingStore;
+    private PlayBillingStore.Snapshot billingSnapshot;
     private boolean bound;
     private boolean powerSaveModeReceiverRegistered;
     private BridgeState latestState = emptyState();
@@ -160,6 +164,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         getWindow().getDecorView().setSystemUiVisibility(darkMode ? 0
                 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         setContentView(buildContent());
+        billingStore = new PlayBillingStore(this);
+        billingStore.setListener(this);
         render(latestState);
     }
 
@@ -178,12 +184,14 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         }
         powerSaveModeReceiverRegistered = true;
         bound = bindService(new Intent(this, BridgeService.class), serviceConnection, BIND_AUTO_CREATE);
+        billingStore.start();
         render(latestState);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        billingStore.refresh();
         render(latestState);
     }
 
@@ -203,6 +211,12 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     }
 
     @Override
+    protected void onDestroy() {
+        billingStore.close();
+        super.onDestroy();
+    }
+
+    @Override
     public void onBridgeStateChanged(BridgeState state) {
         runOnUiThread(() -> {
             latestState = state;
@@ -212,6 +226,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
             render(state);
             tryCompletePendingAction();
         });
+    }
+
+    @Override
+    public void onBillingSnapshotChanged(PlayBillingStore.Snapshot snapshot) {
+        runOnUiThread(() -> billingSnapshot = snapshot);
     }
 
     private View buildContent() {

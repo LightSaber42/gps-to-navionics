@@ -44,6 +44,90 @@ struct EntitlementDecision: Equatable, Sendable {
     let featureLevel: FeatureLevel
 }
 
+struct EntitlementCache: Codable, Equatable, Sendable {
+    private(set) var anchorLastValidatedActiveAt: Date?
+    private(set) var remoteLastValidatedActiveAt: Date?
+    private(set) var remoteKnownExpirationAt: Date?
+    private(set) var remoteKnownRevoked = false
+
+    mutating func recordActive(
+        _ feature: FeatureLevel,
+        at validationDate: Date,
+        expiration: Date? = nil
+    ) {
+        switch feature {
+        case .free:
+            break
+        case .anchorWatch:
+            anchorLastValidatedActiveAt = validationDate
+        case .remoteAnchorWatch:
+            remoteLastValidatedActiveAt = validationDate
+            remoteKnownExpirationAt = expiration
+            remoteKnownRevoked = false
+        }
+    }
+
+    mutating func recordInactive(
+        _ feature: FeatureLevel,
+        knownExpirationAt: Date? = nil,
+        knownRevoked: Bool = false
+    ) {
+        switch feature {
+        case .free:
+            break
+        case .anchorWatch:
+            anchorLastValidatedActiveAt = nil
+        case .remoteAnchorWatch:
+            remoteLastValidatedActiveAt = nil
+            remoteKnownExpirationAt = knownExpirationAt
+            remoteKnownRevoked = knownRevoked
+        }
+    }
+
+    func unavailableEvidence(for feature: FeatureLevel) -> EntitlementEvidence {
+        switch feature {
+        case .free:
+            return EntitlementEvidence(storeStatus: .inactive)
+        case .anchorWatch:
+            return EntitlementEvidence(
+                storeStatus: .unavailable,
+                lastValidatedActiveAt: anchorLastValidatedActiveAt
+            )
+        case .remoteAnchorWatch:
+            return EntitlementEvidence(
+                storeStatus: .unavailable,
+                lastValidatedActiveAt: remoteLastValidatedActiveAt,
+                knownExpirationAt: remoteKnownExpirationAt,
+                isKnownRevoked: remoteKnownRevoked
+            )
+        }
+    }
+}
+
+struct EntitlementCacheStore {
+    private static let storageKey = "entitlementValidationCache.v1"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func load() -> EntitlementCache {
+        guard let data = defaults.data(forKey: Self.storageKey),
+              let cache = try? JSONDecoder().decode(EntitlementCache.self, from: data) else {
+            return EntitlementCache()
+        }
+        return cache
+    }
+
+    func save(_ cache: EntitlementCache) {
+        guard let data = try? JSONEncoder().encode(cache) else {
+            return
+        }
+        defaults.set(data, forKey: Self.storageKey)
+    }
+}
+
 struct SessionEntitlementLease: Codable, Equatable, Sendable {
     let sessionID: String
     let featureLevel: FeatureLevel

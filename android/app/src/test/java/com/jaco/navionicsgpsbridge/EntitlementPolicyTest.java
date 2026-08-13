@@ -1,12 +1,20 @@
 package com.jaco.navionicsgpsbridge;
 
+import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.Signature;
+import java.util.Base64;
+
 public final class EntitlementPolicyTest {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         testCumulativeEntitlementsAndOfflinePolicy();
         testKnownExpiryRevocationAndClockRollback();
         testSessionLeaseContinuityAndIsolation();
         testSessionLeaseSerialization();
         testStoreProductIdentifiersRemainStable();
+        testEntitlementCacheTransitionsAndSerialization();
+        testPlayPurchaseSignatureVerification();
     }
 
     private static void testCumulativeEntitlementsAndOfflinePolicy() {
@@ -136,6 +144,62 @@ public final class EntitlementPolicyTest {
                 StoreProductIdentifiers.REMOTE_ANCHOR_WATCH);
         assertEquals("monthly", StoreProductIdentifiers.REMOTE_MONTHLY_BASE_PLAN);
         assertEquals("annual", StoreProductIdentifiers.REMOTE_ANNUAL_BASE_PLAN);
+    }
+
+    private static void testEntitlementCacheTransitionsAndSerialization() {
+        long validation = 1_000_000L;
+        EntitlementCache cache = new EntitlementCache();
+        cache.recordActive(EntitlementPolicy.FeatureLevel.ANCHOR_WATCH, validation, null);
+        cache.recordActive(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                validation,
+                validation + 60_000L);
+
+        EntitlementCache restored = EntitlementCache.fromPersistedValue(
+                cache.persistedValue());
+        assertNotNull(restored, "A valid entitlement cache should restore");
+        assertEquals(validation, restored.anchorLastValidatedActiveAtMillis);
+        assertEquals(validation, restored.remoteLastValidatedActiveAtMillis);
+        assertEquals(validation + 60_000L, restored.remoteKnownExpirationAtMillis);
+
+        restored.recordInactive(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                validation + 60_000L,
+                true);
+        EntitlementPolicy.Evidence evidence = restored.unavailableEvidence(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH);
+        assertNull(evidence.lastValidatedActiveAtMillis,
+                "Known inactive state must clear the active cache");
+        assertTrue(evidence.knownRevoked,
+                "Known revocation must survive an unavailable store");
+        assertNull(EntitlementCache.fromPersistedValue("2|-|-|-|0"),
+                "Unknown cache versions must fail closed");
+    }
+
+    private static void testPlayPurchaseSignatureVerification() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(1024);
+        KeyPair keyPair = generator.generateKeyPair();
+        String purchaseData = "{\"productId\":\"anchor_watch_lifetime\"}";
+        Signature signer = Signature.getInstance("SHA1withRSA");
+        signer.initSign(keyPair.getPrivate());
+        signer.update(purchaseData.getBytes(StandardCharsets.UTF_8));
+        String publicKey = Base64.getEncoder().encodeToString(
+                keyPair.getPublic().getEncoded());
+        String signature = Base64.getEncoder().encodeToString(signer.sign());
+
+        assertTrue(PlayPurchaseSignatureVerifier.verify(
+                publicKey,
+                purchaseData,
+                signature), "A valid Google Play signature should verify");
+        assertFalse(PlayPurchaseSignatureVerifier.verify(
+                publicKey,
+                purchaseData + "tampered",
+                signature), "Tampered purchase data must fail verification");
+        assertFalse(PlayPurchaseSignatureVerifier.verify(
+                "",
+                purchaseData,
+                signature), "A missing Play public key must fail closed");
     }
 
     private static void assertEquals(Object expected, Object actual) {

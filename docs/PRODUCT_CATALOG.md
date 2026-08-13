@@ -22,6 +22,8 @@ Place both Remote products in the same subscription group and at the same servic
 
 The two Remote choices are base plans under one subscription product. As on iOS, the boat app grants Remote access only together with Anchor Watch ownership.
 
+Before license testing, replace the empty `play_billing_public_key` string resource with the app's **Licensing & In-App Billing** public key from Play Console. The key is public verification material, not a signing secret. Android entitlement checks fail closed while it is absent. Never add an upload key, app-signing private key, service-account credential, purchase token, or pairing secret to the repository.
+
 ## Ownership boundary
 
 Purchases are platform-specific and are restored only with the same Apple or Google account. There is no cross-store entitlement transfer and no developer account or entitlement backend. Only the authoritative boat phone validates or requires Remote Anchor Watch; the paired Android shore monitor remains billing-free.

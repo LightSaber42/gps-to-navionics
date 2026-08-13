@@ -8,7 +8,9 @@ struct ContentView: View {
         var id: String { rawValue }
     }
 
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var controller = BridgeController()
+    @StateObject private var purchaseStore = PurchaseStore()
     @State private var selectedSection = DashboardSection.bridge
     @State private var showingAnchorPairing = false
     @State private var showingDisarmConfirmation = false
@@ -52,6 +54,15 @@ struct ContentView: View {
             .onAppear {
                 if controller.anchorAlarmArmed || controller.isLayingAnchor {
                     selectedSection = .anchor
+                }
+            }
+            .task {
+                purchaseStore.start()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task {
+                    await purchaseStore.refresh()
                 }
             }
             .onChange(of: controller.anchorAlarmTriggered) { _, triggered in

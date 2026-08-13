@@ -27,7 +27,7 @@ The app enables continuous background location updates for an explicitly started
 
 The Android Studio project is in [`android`](android). It requires Android 8.0 or newer.
 
-1. Open the `android` directory in Android Studio, or run `android/build-debug.sh` to build a signed debug APK. The first command-line build may download the cached ZXing QR dependency.
+1. Open the `android` directory in Android Studio, or run `android/build-debug.sh` to build and verify a signed debug APK through the pinned Gradle wrapper. The first command-line build downloads the Gradle distribution and declared dependencies.
 2. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the Android phone.
 3. Put the Android phone and iPad on the same Wi-Fi network.
 4. Open **GPS to Navionics**, tap **Start Streaming**, and allow Precise Location and notifications.
