@@ -245,6 +245,14 @@ final class BridgeController: NSObject, ObservableObject,
         return String(format: "±%.0f m", latestLocation.horizontalAccuracy)
     }
 
+    var degradedAnchorGPSWarning: String? {
+        guard currentFixAge <= Self.staleFixSeconds else { return nil }
+        return AnchorGPSQuality.degradedWarning(
+            accuracyMeters: latestLocation?.horizontalAccuracy,
+            radiusMeters: anchorRadiusMeters
+        )
+    }
+
     var speedDescription: String {
         guard let latestLocation, latestLocation.speed >= 0 else { return "—" }
         return String(format: "%.1f kn", latestLocation.speed * 1.943_844_492_4)

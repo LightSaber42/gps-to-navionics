@@ -145,6 +145,8 @@ public final class MainActivity extends Activity implements BridgeService.StateL
     private AnchorPlotView anchorPlotView;
     private TextView anchorPlotNote;
     private LinearLayout armedPowerSavingWarning;
+    private LinearLayout armedGpsAccuracyWarning;
+    private TextView armedGpsAccuracyWarningBody;
     private TextView normalShoreMonitorValue;
     private TextView armedShoreMonitorValue;
 
@@ -304,6 +306,11 @@ public final class MainActivity extends Activity implements BridgeService.StateL
         LinearLayout.LayoutParams powerWarningParams = matchWrap();
         powerWarningParams.topMargin = dp(12);
         plotCard.addView(armedPowerSavingWarning, powerWarningParams);
+
+        armedGpsAccuracyWarning = buildGpsAccuracyWarning();
+        LinearLayout.LayoutParams gpsWarningParams = matchWrap();
+        gpsWarningParams.topMargin = dp(12);
+        plotCard.addView(armedGpsAccuracyWarning, gpsWarningParams);
 
         armedAnchorPrimaryButton = actionButton("●  Arm anchor alarm", R.color.nav_blue);
         armedAnchorPrimaryButton.setOnClickListener(view -> handleActiveAnchorPrimaryAction());
@@ -896,6 +903,13 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 state.anchorRadiusMeters,
                 state.anchorTrackPoints.size(),
                 accuracy));
+        String gpsWarning = state.hasLocation && state.fixAgeSeconds <= STALE_FIX_SECONDS
+                ? AnchorGpsQuality.degradedWarning(
+                        state.accuracyMeters, state.anchorRadiusMeters)
+                : null;
+        armedGpsAccuracyWarningBody.setText(gpsWarning == null ? "" : gpsWarning);
+        armedGpsAccuracyWarning.setVisibility(
+                gpsWarning == null ? View.GONE : View.VISIBLE);
         String message = state.anchorAlertReason != null
                 ? state.anchorAlertReason : setupActive ? anchorActionMessage : null;
         armedAnchorMessage.setText(message == null ? "" : message);
@@ -1294,6 +1308,28 @@ public final class MainActivity extends Activity implements BridgeService.StateL
                 this::openPowerSavingSettings);
         settings.setTextColor(getColor(R.color.nav_warning));
         warning.addView(settings, wrapWrap());
+        warning.setVisibility(View.GONE);
+        return warning;
+    }
+
+    private LinearLayout buildGpsAccuracyWarning() {
+        LinearLayout warning = vertical();
+        warning.setPadding(dp(14), dp(12), dp(14), dp(12));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(getColor(R.color.nav_warning_surface));
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(2), getColor(R.color.nav_warning));
+        warning.setBackground(background);
+
+        TextView title = text("⚠  Degraded GPS precision", 15, R.color.nav_warning);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        warning.addView(title, matchWrap());
+
+        armedGpsAccuracyWarningBody = text("", 13, R.color.nav_text);
+        armedGpsAccuracyWarningBody.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.topMargin = dp(5);
+        warning.addView(armedGpsAccuracyWarningBody, bodyParams);
         warning.setVisibility(View.GONE);
         return warning;
     }

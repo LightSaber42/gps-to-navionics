@@ -26,6 +26,17 @@ public final class AnchorAlarmTest {
         assertNear(50.0, AnchorAlarm.Mode.SHORELINED.adjustedRadius(500.0), 0.01);
         assertNear(200.0, AnchorAlarm.Mode.FREE_SWINGING.adjustedRadius(500.0), 0.01);
 
+        assertNull(AnchorGpsQuality.degradedWarning(1.0, 3.0),
+                "Good GPS precision should not warn");
+        assertNull(AnchorGpsQuality.degradedWarning(7.0, 15.0),
+                "Accuracy below half the alarm radius should not warn");
+        String degradedWarning = AnchorGpsQuality.degradedWarning(7.0, 3.0);
+        assertContains(degradedWarning, "±7 m");
+        assertContains(degradedWarning, "3 m alarm limit");
+        assertContains(degradedWarning, "about 10 m");
+        assertNull(AnchorGpsQuality.degradedWarning(Double.POSITIVE_INFINITY, 3.0),
+                "Invalid GPS precision should not warn");
+
         AnchorAlarm.Offset north = AnchorAlarm.plotOffsetMeters(0.0, 0.0, 0.001, 0.0);
         assertNear(0.0, north.eastMeters, 0.01);
         assertNear(111.2, north.northMeters, 0.2);
@@ -50,5 +61,14 @@ public final class AnchorAlarmTest {
 
     private static void assertFalse(boolean condition, String message) {
         assertTrue(!condition, message);
+    }
+
+    private static void assertNull(Object value, String message) {
+        if (value != null) throw new AssertionError(message + ": " + value);
+    }
+
+    private static void assertContains(String value, String expected) {
+        assertTrue(value != null && value.contains(expected),
+                "Expected warning to contain \"" + expected + "\", got: " + value);
     }
 }

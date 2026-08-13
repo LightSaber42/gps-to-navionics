@@ -74,6 +74,33 @@ struct AnchorTrackPoint: Identifiable, Equatable, Sendable {
     let accuracyMeters: Double
 }
 
+enum AnchorGPSQuality {
+    private static let minimumWarningAccuracyMeters = 2.0
+    private static let maximumAccuracyFractionOfRadius = 0.5
+
+    static func degradedWarning(
+        accuracyMeters: Double?,
+        radiusMeters: Double
+    ) -> String? {
+        guard let accuracyMeters,
+              accuracyMeters.isFinite,
+              accuracyMeters >= 0,
+              radiusMeters.isFinite,
+              radiusMeters > 0 else { return nil }
+        let warningThreshold = max(
+            minimumWarningAccuracyMeters,
+            radiusMeters * maximumAccuracyFractionOfRadius
+        )
+        guard accuracyMeters > warningThreshold else { return nil }
+        return String(
+            format: "GPS precision is degraded (±%.0f m) for a %.0f m alarm limit. With this fix, the conservative alarm needs about %.0f m of measured drift to confirm a breach. Give the boat phone a clearer view of the sky.",
+            accuracyMeters,
+            radiusMeters,
+            radiusMeters + accuracyMeters
+        )
+    }
+}
+
 enum AnchorAlarmGeometry {
     private static let earthRadiusMeters = 6_371_008.8
 

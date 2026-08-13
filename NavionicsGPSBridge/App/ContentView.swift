@@ -387,6 +387,24 @@ struct ContentView: View {
                 adjustableWhileArmed: true
             )
 
+            if let warning = controller.degradedAnchorGPSWarning {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Degraded GPS precision", systemImage: "location.slash.fill")
+                        .font(.footnote.bold())
+                    Text(warning)
+                        .font(.footnote)
+                }
+                .foregroundStyle(.orange)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(.orange.opacity(0.65), lineWidth: 1)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             if controller.isLayingAnchor {
                 Button(role: .cancel, action: controller.cancelAnchorSetup) {
                     Label("Cancel anchoring", systemImage: "xmark.circle")

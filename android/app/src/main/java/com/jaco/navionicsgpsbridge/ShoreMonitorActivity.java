@@ -70,6 +70,8 @@ public final class ShoreMonitorActivity extends Activity
     private LinearLayout plotCard;
     private LinearLayout pairingCard;
     private LinearLayout safetyCard;
+    private LinearLayout gpsAccuracyCard;
+    private TextView gpsAccuracyWarning;
     private Button reconnectButton;
     private Button startButton;
     private Button stopButton;
@@ -203,6 +205,18 @@ public final class ShoreMonitorActivity extends Activity
         alarmCard.addView(silenceButton, matchWrap());
         page.addView(alarmCard, cardParams());
 
+        gpsAccuracyCard = warningCard();
+        TextView gpsAccuracyTitle = text(
+                "Degraded boat GPS precision", 18, R.color.nav_warning);
+        gpsAccuracyTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        gpsAccuracyCard.addView(gpsAccuracyTitle, matchWrap());
+        gpsAccuracyWarning = text("", 14, R.color.nav_text);
+        gpsAccuracyWarning.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams gpsAccuracyParams = matchWrap();
+        gpsAccuracyParams.topMargin = dp(8);
+        gpsAccuracyCard.addView(gpsAccuracyWarning, gpsAccuracyParams);
+        page.addView(gpsAccuracyCard, cardParams());
+
         plotCard = card();
         TextView plotHeader = text("Boat position history", 18, R.color.nav_text);
         plotHeader.setTypeface(Typeface.DEFAULT_BOLD);
@@ -317,6 +331,7 @@ public final class ShoreMonitorActivity extends Activity
         boolean enabled = paired && ShoreMonitorService.isEnabled(this);
         pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
         alarmCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        gpsAccuracyCard.setVisibility(View.GONE);
         plotCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
         safetyCard.setVisibility(enabled ? View.VISIBLE : View.GONE);
         reconnectButton.setVisibility(enabled ? View.VISIBLE : View.GONE);
@@ -353,6 +368,12 @@ public final class ShoreMonitorActivity extends Activity
         alarmValue.setTextColor(getColor(state.alarmActive
                 ? R.color.nav_error : state.armed ? R.color.nav_success : R.color.nav_secondary));
         silenceButton.setVisibility(state.alarmActive ? View.VISIBLE : View.GONE);
+        String gpsWarning = state.connected && state.armed
+                ? AnchorGpsQuality.degradedWarning(
+                        state.accuracyMeters, state.radiusMeters)
+                : null;
+        gpsAccuracyWarning.setText(gpsWarning == null ? "" : gpsWarning);
+        gpsAccuracyCard.setVisibility(gpsWarning == null ? View.GONE : View.VISIBLE);
         distanceValue.setText(Double.isFinite(state.distanceMeters)
                 ? String.format(Locale.US, "%.1f m", state.distanceMeters) : "—");
         limitValue.setText(String.format(Locale.US, "%.0f m", state.radiusMeters));

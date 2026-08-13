@@ -66,6 +66,40 @@ final class AnchorAlarmTests: XCTestCase {
         XCTAssertEqual(AnchorAlarmMode.freeSwinging.adjustedRadius(500), 200)
     }
 
+    func testGoodGPSPrecisionDoesNotWarn() {
+        XCTAssertNil(AnchorGPSQuality.degradedWarning(
+            accuracyMeters: 1,
+            radiusMeters: 3
+        ))
+        XCTAssertNil(AnchorGPSQuality.degradedWarning(
+            accuracyMeters: 7,
+            radiusMeters: 15
+        ))
+    }
+
+    func testDegradedGPSPrecisionExplainsEffectiveConfirmationDistance() {
+        let warning = AnchorGPSQuality.degradedWarning(
+            accuracyMeters: 7,
+            radiusMeters: 3
+        )
+
+        XCTAssertNotNil(warning)
+        XCTAssertTrue(warning?.contains("±7 m") == true)
+        XCTAssertTrue(warning?.contains("3 m alarm limit") == true)
+        XCTAssertTrue(warning?.contains("about 10 m") == true)
+    }
+
+    func testInvalidGPSPrecisionDoesNotWarn() {
+        XCTAssertNil(AnchorGPSQuality.degradedWarning(
+            accuracyMeters: nil,
+            radiusMeters: 3
+        ))
+        XCTAssertNil(AnchorGPSQuality.degradedWarning(
+            accuracyMeters: .infinity,
+            radiusMeters: 3
+        ))
+    }
+
     func testPlotOffsetUsesNorthAndEastMetres() {
         let north = AnchorAlarmGeometry.plotOffsetMeters(
             referenceLatitude: 0,
