@@ -63,6 +63,9 @@ public final class MainActivity extends Activity implements
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             binder = (BridgeService.LocalBinder) service;
+            if (billingSnapshot != null) {
+                binder.updateEntitlementDecision(billingSnapshot.entitlementDecision);
+            }
             binder.addListener(MainActivity.this);
         }
 
@@ -230,7 +233,12 @@ public final class MainActivity extends Activity implements
 
     @Override
     public void onBillingSnapshotChanged(PlayBillingStore.Snapshot snapshot) {
-        runOnUiThread(() -> billingSnapshot = snapshot);
+        runOnUiThread(() -> {
+            billingSnapshot = snapshot;
+            if (binder != null) {
+                binder.updateEntitlementDecision(snapshot.entitlementDecision);
+            }
+        });
     }
 
     private View buildContent() {

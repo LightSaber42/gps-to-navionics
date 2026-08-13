@@ -36,6 +36,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         public void onServiceConnected(ComponentName name, IBinder service) {
             binder = (BridgeService.LocalBinder) service;
             binder.addListener(AnchorPairingActivity.this);
+            refreshPairingCode();
         }
 
         @Override
@@ -54,19 +55,20 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
     private TextView monitorStatusValue;
     private TextView remoteAccessStatusValue;
     private Uri pairingUri;
+    private boolean refreshPairingAfterState;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         pairingStore = new AnchorPairingStore(this);
         setContentView(buildContent());
-        refreshPairingCode();
+        showRemoteAccessRequired();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        refreshPairingCode();
+        if (binder != null) refreshPairingCode();
     }
 
     @Override
@@ -91,6 +93,14 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
     public void onBridgeStateChanged(BridgeState state) {
         runOnUiThread(() -> {
             if (monitorStatusValue == null) return;
+            if (binder == null || !binder.canUseRemoteAnchorWatch()) {
+                showRemoteAccessRequired();
+                return;
+            }
+            if (refreshPairingAfterState) {
+                refreshPairingAfterState = false;
+                refreshPairingCode();
+            }
             if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
                 monitorStatusValue.setText("Connected · Sound ready");
                 monitorStatusValue.setTextColor(getColor(R.color.nav_success));
@@ -239,6 +249,10 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
     }
 
     private void refreshPairingCode() {
+        if (binder == null || !binder.canUseRemoteAnchorWatch()) {
+            showRemoteAccessRequired();
+            return;
+        }
         try {
             AnchorPairingStore.HostConfiguration configuration =
                     pairingStore.loadOrCreateHost();
@@ -280,6 +294,21 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         }
     }
 
+    private void showRemoteAccessRequired() {
+        pairingUri = null;
+        if (pairingLinkValue != null) pairingLinkValue.setText("");
+        if (qrView != null) qrView.setImageDrawable(null);
+        if (addressValue != null) addressValue.setText("Pairing unavailable");
+        if (errorValue != null) {
+            errorValue.setText(
+                    "Unlock Remote Anchor Watch on the boat phone to create or view a pairing code.");
+        }
+        if (monitorStatusValue != null) {
+            monitorStatusValue.setText("Remote Anchor Watch required");
+            monitorStatusValue.setTextColor(getColor(R.color.nav_warning));
+        }
+    }
+
     private void sharePairingLink() {
         if (pairingUri == null) return;
         Intent share = new Intent(Intent.ACTION_SEND)
@@ -299,15 +328,13 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 .setMessage("The shore phone will disconnect and must scan the new code.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Make new code", (dialog, which) -> {
-                    try {
-                        pairingStore.rotateHost();
-                        startService(new Intent(this, BridgeService.class)
-                                .setAction(BridgeService.ACTION_ROTATE_ANCHOR_PAIRING));
-                        refreshPairingCode();
-                    } catch (GeneralSecurityException error) {
-                        errorValue.setText("Could not rotate pairing: "
-                                + error.getLocalizedMessage());
+                    if (binder == null || !binder.canUseRemoteAnchorWatch()) {
+                        showRemoteAccessRequired();
+                        return;
                     }
+                    refreshPairingAfterState = true;
+                    startService(new Intent(this, BridgeService.class)
+                            .setAction(BridgeService.ACTION_ROTATE_ANCHOR_PAIRING));
                 })
                 .show();
     }

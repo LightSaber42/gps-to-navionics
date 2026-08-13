@@ -167,11 +167,13 @@ struct SessionEntitlementLeaseStore {
         self.defaults = defaults
     }
 
-    func save(_ lease: SessionEntitlementLease) {
+    @discardableResult
+    func save(_ lease: SessionEntitlementLease) -> Bool {
         guard let data = try? JSONEncoder().encode(lease) else {
-            return
+            return false
         }
         defaults.set(data, forKey: Self.storageKey)
+        return defaults.data(forKey: Self.storageKey) == data
     }
 
     func load() -> SessionEntitlementLease? {
@@ -186,6 +188,60 @@ struct SessionEntitlementLeaseStore {
 
     func clear() {
         defaults.removeObject(forKey: Self.storageKey)
+    }
+}
+
+enum EntitlementSessionAccess {
+    static func authorizes(
+        _ requiredFeature: FeatureLevel,
+        decision: EntitlementDecision,
+        activeSessionID: String?,
+        lease: SessionEntitlementLease?
+    ) -> Bool {
+        if requiredFeature == .free {
+            return true
+        }
+        if decision.featureLevel.rawValue >= requiredFeature.rawValue {
+            return true
+        }
+        guard let activeSessionID, let lease else {
+            return false
+        }
+        return lease.authorizes(requiredFeature, for: activeSessionID)
+    }
+
+    static func leaseForStartingSession(
+        sessionID: String,
+        decision: EntitlementDecision,
+        at now: Date
+    ) -> SessionEntitlementLease? {
+        guard decision.featureLevel.rawValue >= FeatureLevel.anchorWatch.rawValue else {
+            return nil
+        }
+        return SessionEntitlementLease.acquire(
+            sessionID: sessionID,
+            requiredFeature: decision.featureLevel,
+            decision: decision,
+            at: now
+        )
+    }
+
+    static func upgradedLease(
+        _ lease: SessionEntitlementLease,
+        activeSessionID: String,
+        decision: EntitlementDecision,
+        at now: Date
+    ) -> SessionEntitlementLease? {
+        guard lease.sessionID == activeSessionID,
+              decision.featureLevel.rawValue > lease.featureLevel.rawValue else {
+            return nil
+        }
+        return SessionEntitlementLease.acquire(
+            sessionID: activeSessionID,
+            requiredFeature: decision.featureLevel,
+            decision: decision,
+            at: now
+        )
     }
 }
 

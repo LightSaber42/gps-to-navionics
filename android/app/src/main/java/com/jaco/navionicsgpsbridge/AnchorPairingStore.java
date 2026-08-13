@@ -35,13 +35,19 @@ final class AnchorPairingStore {
         preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
     }
 
-    synchronized HostConfiguration loadOrCreateHost() throws GeneralSecurityException {
+    synchronized HostConfiguration loadHost() throws GeneralSecurityException {
         String deviceId = preferences.getString(HOST_ID, null);
         byte[] key = readSecret(HOST_SECRET);
-        if (deviceId != null && key != null
-                && key.length == AnchorSyncCrypto.PAIRING_KEY_BYTES) {
-            return new HostConfiguration(deviceId, key);
+        if (deviceId == null || key == null
+                || key.length != AnchorSyncCrypto.PAIRING_KEY_BYTES) {
+            return null;
         }
+        return new HostConfiguration(deviceId, key);
+    }
+
+    synchronized HostConfiguration loadOrCreateHost() throws GeneralSecurityException {
+        HostConfiguration existing = loadHost();
+        if (existing != null) return existing;
         return createHost();
     }
 

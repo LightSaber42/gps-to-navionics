@@ -15,6 +15,8 @@ public final class EntitlementPolicyTest {
         testStoreProductIdentifiersRemainStable();
         testEntitlementCacheTransitionsAndSerialization();
         testPlayPurchaseSignatureVerification();
+        testSessionAccessUsesCurrentEntitlementOrExactActiveLease();
+        testStartingAndUpgradingSessionLeaseNeverExceedsCurrentEntitlement();
     }
 
     private static void testCumulativeEntitlementsAndOfflinePolicy() {
@@ -200,6 +202,75 @@ public final class EntitlementPolicyTest {
                 "",
                 purchaseData,
                 signature), "A missing Play public key must fail closed");
+    }
+
+    private static void testSessionAccessUsesCurrentEntitlementOrExactActiveLease() {
+        EntitlementPolicy.Decision activeRemote = new EntitlementPolicy.Decision(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH);
+        EntitlementPolicy.Decision inactive = new EntitlementPolicy.Decision(
+                EntitlementPolicy.FeatureLevel.FREE);
+        SessionEntitlementLease lease = SessionEntitlementLease.acquire(
+                "active-session",
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                activeRemote,
+                1_000L);
+
+        assertTrue(EntitlementSessionAccess.authorizes(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                activeRemote,
+                null,
+                null), "Current entitlement should authorize new work");
+        assertTrue(EntitlementSessionAccess.authorizes(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                inactive,
+                "active-session",
+                lease), "Exact active session should retain leased access");
+        assertFalse(EntitlementSessionAccess.authorizes(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                inactive,
+                "different-session",
+                lease), "A lease must not authorize another session");
+        assertFalse(EntitlementSessionAccess.authorizes(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                inactive,
+                null,
+                lease), "A lease must not authorize work outside an active session");
+    }
+
+    private static void testStartingAndUpgradingSessionLeaseNeverExceedsCurrentEntitlement() {
+        EntitlementPolicy.Decision anchorDecision = new EntitlementPolicy.Decision(
+                EntitlementPolicy.FeatureLevel.ANCHOR_WATCH);
+        EntitlementPolicy.Decision remoteDecision = new EntitlementPolicy.Decision(
+                EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH);
+        SessionEntitlementLease anchorLease = EntitlementSessionAccess.leaseForStartingSession(
+                "session",
+                anchorDecision,
+                2_000L);
+
+        assertNotNull(anchorLease, "Anchor ownership should create an anchor lease");
+        assertEquals(EntitlementPolicy.FeatureLevel.ANCHOR_WATCH, anchorLease.featureLevel);
+        assertNull(EntitlementSessionAccess.upgradedLease(
+                anchorLease,
+                "session",
+                anchorDecision,
+                2_000L), "An equal entitlement must not rewrite the lease");
+        assertNull(EntitlementSessionAccess.upgradedLease(
+                anchorLease,
+                "different-session",
+                remoteDecision,
+                2_000L), "A different session must not receive an upgrade");
+        SessionEntitlementLease remoteLease = EntitlementSessionAccess.upgradedLease(
+                anchorLease,
+                "session",
+                remoteDecision,
+                2_000L);
+        assertNotNull(remoteLease, "Current Remote ownership should upgrade the active lease");
+        assertEquals(EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                remoteLease.featureLevel);
+        assertNull(EntitlementSessionAccess.leaseForStartingSession(
+                "free-session",
+                new EntitlementPolicy.Decision(EntitlementPolicy.FeatureLevel.FREE),
+                2_000L), "Free access must not create a paid session lease");
     }
 
     private static void assertEquals(Object expected, Object actual) {

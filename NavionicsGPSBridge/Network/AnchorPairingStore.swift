@@ -19,6 +19,15 @@ final class AnchorPairingStore {
         self.defaults = defaults
     }
 
+    func load() -> AnchorPairingConfiguration? {
+        guard let deviceID = defaults.string(forKey: DefaultsKey.deviceID),
+              let existingKey = readKey(),
+              existingKey.count == AnchorSyncCrypto.pairingKeyBytes else {
+            return nil
+        }
+        return AnchorPairingConfiguration(deviceID: deviceID, pairingKey: existingKey)
+    }
+
     func loadOrCreate() throws -> AnchorPairingConfiguration {
         let deviceID: String
         if let storedID = defaults.string(forKey: DefaultsKey.deviceID) {

@@ -63,8 +63,8 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Implement a pure entitlement evaluator with store status, last validation time, seven-day offline policy, and revocation handling.
 - [x] Implement a session entitlement lease so an armed session remains enabled until disarm.
 - [ ] Gate anchor arming/setup/history behind Anchor Watch without hiding the anchor-first product introduction.
-- [ ] Gate pairing-code creation, sync-server availability, and new remote sessions behind Remote Anchor Watch.
-- [ ] Preserve stored pairing when remote entitlement becomes inactive.
+- [x] Gate pairing-code creation, sync-server availability, and new remote sessions behind Remote Anchor Watch.
+- [x] Preserve stored pairing when remote entitlement becomes inactive.
 - [ ] Add a debug-only, unmistakably labelled StoreKit/Play-license testing path that cannot ship enabled in Release.
 
 ## 3. iOS purchases and entitlement state

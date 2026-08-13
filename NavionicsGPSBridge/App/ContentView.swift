@@ -57,7 +57,11 @@ struct ContentView: View {
                 }
             }
             .task {
+                controller.updateEntitlementDecision(purchaseStore.entitlementDecision)
                 purchaseStore.start()
+            }
+            .onChange(of: purchaseStore.entitlementDecision) { _, decision in
+                controller.updateEntitlementDecision(decision)
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }

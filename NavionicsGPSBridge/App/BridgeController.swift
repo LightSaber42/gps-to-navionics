@@ -30,6 +30,7 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var shoreMonitorConnected = false
     @Published private(set) var shoreMonitorSoundReady = false
     @Published private(set) var anchorPairingURL: URL?
+    @Published private(set) var entitlementDecision = EntitlementDecision(featureLevel: .free)
     @Published private var clock = Date()
 
     let port: UInt16 = 11_123
@@ -46,6 +47,8 @@ final class BridgeController: NSObject, ObservableObject,
         static let referenceLatitude = "anchor.referenceLatitude"
         static let referenceLongitude = "anchor.referenceLongitude"
         static let armed = "anchor.armed"
+        static let sessionLeaseMigrationCompleted =
+            "anchor.sessionEntitlementLeaseMigrationCompleted.v1"
     }
 
     private static let alarmCategoryIdentifier = "ANCHOR_ALARM"
@@ -64,6 +67,7 @@ final class BridgeController: NSObject, ObservableObject,
     private let pairingStore = AnchorPairingStore()
     private let anchorHistoryStore = AnchorHistoryStore()
     private let anchorEventLog = AnchorEventLog()
+    private let sessionLeaseStore = SessionEntitlementLeaseStore()
     private var monitorTimer: Timer?
     private var locationUpdatesActive = false
     private var pendingAnchorAction: PendingAnchorAction?
@@ -72,6 +76,7 @@ final class BridgeController: NSObject, ObservableObject,
     private var breachStartedAt: Date?
     private var alarmAudioPlayer: AVAudioPlayer?
     private var pairingConfiguration: AnchorPairingConfiguration?
+    private var sessionEntitlementLease: SessionEntitlementLease?
     private var breachEventIssued = false
     private var lostFixEventIssued = false
     private var lowBatteryEventIssued = false
@@ -79,6 +84,12 @@ final class BridgeController: NSObject, ObservableObject,
 
     override init() {
         authorizationStatus = locationManager.authorizationStatus
+        let entitlementCache = EntitlementCacheStore().load()
+        entitlementDecision = EntitlementPolicy.evaluate(
+            anchorWatch: entitlementCache.unavailableEvidence(for: .anchorWatch),
+            remoteAnchorWatch: entitlementCache.unavailableEvidence(for: .remoteAnchorWatch),
+            at: Date()
+        )
         super.init()
 
         loadAnchorConfiguration()
@@ -115,26 +126,46 @@ final class BridgeController: NSObject, ObservableObject,
                 self?.lastError = message
             }
         }
-        do {
-            let configuration = try pairingStore.loadOrCreate()
-            pairingConfiguration = configuration
-            anchorSyncServer.start(pairingKey: configuration.pairingKey)
-        } catch {
-            lastError = "Secure shore-monitor pairing could not be initialized: \(error.localizedDescription)"
-        }
+        pairingConfiguration = pairingStore.load()
 
         if defaults.bool(forKey: DefaultsKey.armed), anchorReferenceCoordinate != nil {
-            anchorAlarmArmed = true
-            anchorArmedAt = Date()
-            anchorTrackPoints = anchorHistoryStore.renderedPoints
-            updateLocationMonitoring()
-            updateMonitorTimer()
+            if restoreSessionEntitlementLease() {
+                anchorAlarmArmed = true
+                anchorArmedAt = Date()
+                anchorTrackPoints = anchorHistoryStore.renderedPoints
+                updateLocationMonitoring()
+                updateMonitorTimer()
+            } else {
+                resetPersistedAnchorAfterMissingLease()
+            }
         } else {
+            sessionLeaseStore.clear()
             anchorReferenceCoordinate = nil
             defaults.set(false, forKey: DefaultsKey.hasReference)
+            defaults.set(false, forKey: DefaultsKey.armed)
         }
+        defaults.set(true, forKey: DefaultsKey.sessionLeaseMigrationCompleted)
+        reconcileAnchorSyncServer()
         refreshNetworkAddresses()
         publishAnchorSyncState()
+    }
+
+    var canUseAnchorWatch: Bool {
+        EntitlementSessionAccess.authorizes(
+            .anchorWatch,
+            decision: entitlementDecision,
+            activeSessionID: activeEntitledSessionID,
+            lease: sessionEntitlementLease
+        )
+    }
+
+    var canUseRemoteAnchorWatch: Bool {
+        EntitlementSessionAccess.authorizes(
+            .remoteAnchorWatch,
+            decision: entitlementDecision,
+            activeSessionID: activeEntitledSessionID,
+            lease: sessionEntitlementLease
+        )
     }
 
     var statusTitle: String {
@@ -301,8 +332,28 @@ final class BridgeController: NSObject, ObservableObject,
         updateLocationMonitoring()
     }
 
+    func updateEntitlementDecision(_ decision: EntitlementDecision) {
+        entitlementDecision = decision
+        if anchorAlarmArmed,
+           let sessionID = anchorHistoryStore.sessionID,
+           let currentLease = sessionEntitlementLease,
+           let upgradedLease = EntitlementSessionAccess.upgradedLease(
+                currentLease,
+                activeSessionID: sessionID,
+                decision: decision,
+                at: Date()
+           ),
+           sessionLeaseStore.save(upgradedLease) {
+            sessionEntitlementLease = upgradedLease
+        }
+        reconcileAnchorSyncServer()
+    }
+
     func setAnchorMode(_ mode: AnchorAlarmMode) {
-        guard !anchorAlarmArmed, !isLayingAnchor, anchorMode != mode else { return }
+        guard canUseAnchorWatch,
+              !anchorAlarmArmed,
+              !isLayingAnchor,
+              anchorMode != mode else { return }
         anchorMode = mode
         anchorRadiusMeters = mode.defaultRadiusMeters
         anchorReferenceCoordinate = nil
@@ -315,6 +366,7 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func setAnchorRadius(_ radiusMeters: Double) {
+        guard canUseAnchorWatch else { return }
         let adjustedRadius = anchorMode.adjustedRadius(radiusMeters)
         guard adjustedRadius != anchorRadiusMeters else { return }
         anchorRadiusMeters = adjustedRadius
@@ -331,6 +383,8 @@ final class BridgeController: NSObject, ObservableObject,
         anchorActionMessage = nil
         if anchorAlarmArmed {
             disarmAnchorAlarm()
+        } else if !hasCurrentAnchorEntitlement {
+            anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
         } else if isLayingAnchor {
             guard anchorReferenceCoordinate != nil else { return }
             prepareForAnchorAction(.arm)
@@ -342,7 +396,12 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func markAnchorPosition() {
-        guard !anchorAlarmArmed, anchorMode == .freeSwinging else { return }
+        guard hasCurrentAnchorEntitlement,
+              !anchorAlarmArmed,
+              anchorMode == .freeSwinging else {
+            anchorActionMessage = "Unlock Anchor Watch before recording an anchor position."
+            return
+        }
         isLayingAnchor = true
         anchorReferenceCoordinate = nil
         anchorDistanceMeters = nil
@@ -355,7 +414,14 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func armAnchorAlarm() {
-        guard !anchorAlarmArmed, anchorReferenceCoordinate != nil else { return }
+        guard hasCurrentAnchorEntitlement,
+              !anchorAlarmArmed,
+              anchorReferenceCoordinate != nil else {
+            if !hasCurrentAnchorEntitlement {
+                anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
+            }
+            return
+        }
         anchorActionMessage = nil
         prepareForAnchorAction(.arm)
     }
@@ -404,15 +470,22 @@ final class BridgeController: NSObject, ObservableObject,
         anchorArmedAt = nil
         breachStartedAt = nil
         stopAlarmAudio()
+        sessionEntitlementLease = nil
+        sessionLeaseStore.clear()
         persistAnchorConfiguration(armed: false)
         cancelAlarmNotifications()
         updateIdleTimer()
         updateMonitorTimer()
         updateLocationMonitoring()
         publishAnchorSyncState(immediately: true)
+        reconcileAnchorSyncServer()
     }
 
     func rotateAnchorPairing() {
+        guard canUseRemoteAnchorWatch else {
+            lastError = "Remote Anchor Watch is required to create a pairing code."
+            return
+        }
         do {
             let configuration = try pairingStore.rotate()
             pairingConfiguration = configuration
@@ -427,6 +500,10 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     func refreshAnchorPairing() {
+        guard canUseRemoteAnchorWatch else {
+            anchorPairingURL = nil
+            return
+        }
         refreshNetworkAddresses()
     }
 
@@ -507,6 +584,12 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     private func prepareForAnchorAction(_ action: PendingAnchorAction) {
+        guard hasCurrentAnchorEntitlement else {
+            pendingAnchorAction = nil
+            pendingAnchorActionStartedAt = nil
+            anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
+            return
+        }
         pendingAnchorAction = action
         if actionRequiresNewAnchorReference(action) {
             pendingAnchorActionStartedAt = Date()
@@ -536,6 +619,12 @@ final class BridgeController: NSObject, ObservableObject,
 
     private func tryCompletePendingAnchorAction() {
         guard let action = pendingAnchorAction else { return }
+        guard hasCurrentAnchorEntitlement else {
+            pendingAnchorAction = nil
+            pendingAnchorActionStartedAt = nil
+            anchorActionMessage = "Anchor Watch access is required before this watch can start."
+            return
+        }
         guard let latestLocation,
               latestLocation.horizontalAccuracy >= 0,
               fixAge(for: latestLocation) <= Self.staleFixSeconds else {
@@ -571,26 +660,40 @@ final class BridgeController: NSObject, ObservableObject,
             persistAnchorConfiguration()
             updateLocationMonitoring()
         case .arm:
-            if anchorMode == .shorelined {
-                anchorReferenceCoordinate = latestLocation.coordinate
-            }
-            guard anchorReferenceCoordinate != nil else {
+            let wasLayingAnchor = isLayingAnchor
+            guard anchorMode == .shorelined || anchorReferenceCoordinate != nil else {
                 anchorActionMessage = "Record the anchor-drop position before arming free-swinging mode."
                 updateLocationMonitoring()
                 return
             }
-            let wasLayingAnchor = isLayingAnchor
+            let sessionID: String
+            if wasLayingAnchor, let existingSessionID = anchorHistoryStore.sessionID {
+                sessionID = existingSessionID
+            } else {
+                anchorDistanceMeters = nil
+                clearAnchorTrack()
+                sessionID = anchorHistoryStore.startNewSession()
+            }
+            guard let lease = EntitlementSessionAccess.leaseForStartingSession(
+                    sessionID: sessionID,
+                    decision: entitlementDecision,
+                    at: Date()
+                  ),
+                  sessionLeaseStore.save(lease) else {
+                anchorActionMessage = "Anchor Watch access could not be saved safely. Try arming again."
+                updateLocationMonitoring()
+                return
+            }
+            sessionEntitlementLease = lease
+            if anchorMode == .shorelined {
+                anchorReferenceCoordinate = latestLocation.coordinate
+            }
             isLayingAnchor = false
             anchorAlarmArmed = true
             anchorAlarmTriggered = false
             anchorAlarmSilenced = false
             anchorAlertReason = nil
             anchorActionMessage = nil
-            if !wasLayingAnchor {
-                anchorDistanceMeters = nil
-                clearAnchorTrack()
-                _ = anchorHistoryStore.startNewSession()
-            }
             anchorArmedAt = Date()
             breachStartedAt = nil
             breachEventIssued = false
@@ -603,6 +706,7 @@ final class BridgeController: NSObject, ObservableObject,
             updateLocationMonitoring()
             updateMonitorTimer()
             evaluateAnchorPosition(latestLocation)
+            reconcileAnchorSyncServer()
             publishAnchorSyncState(immediately: true)
             if authorizationStatus == .authorizedWhenInUse {
                 locationManager.requestAlwaysAuthorization()
@@ -1011,6 +1115,77 @@ final class BridgeController: NSObject, ObservableObject,
         }
     }
 
+    private var hasCurrentAnchorEntitlement: Bool {
+        entitlementDecision.featureLevel.rawValue >= FeatureLevel.anchorWatch.rawValue
+    }
+
+    private var activeEntitledSessionID: String? {
+        anchorAlarmArmed ? anchorHistoryStore.sessionID : nil
+    }
+
+    private func restoreSessionEntitlementLease() -> Bool {
+        var sessionID = anchorHistoryStore.sessionID
+        if let storedLease = sessionLeaseStore.load(),
+           let sessionID,
+           storedLease.authorizes(.anchorWatch, for: sessionID) {
+            sessionEntitlementLease = storedLease
+            return true
+        }
+
+        guard !defaults.bool(forKey: DefaultsKey.sessionLeaseMigrationCompleted) else {
+            sessionLeaseStore.clear()
+            return false
+        }
+        if sessionID == nil {
+            sessionID = anchorHistoryStore.startNewSession()
+        }
+        let legacyDecision = EntitlementDecision(featureLevel: .remoteAnchorWatch)
+        guard let sessionID,
+              let migrationLease = EntitlementSessionAccess.leaseForStartingSession(
+                sessionID: sessionID,
+                decision: legacyDecision,
+                at: Date()
+              ),
+              sessionLeaseStore.save(migrationLease) else {
+            return false
+        }
+        sessionEntitlementLease = migrationLease
+        return true
+    }
+
+    private func resetPersistedAnchorAfterMissingLease() {
+        sessionEntitlementLease = nil
+        sessionLeaseStore.clear()
+        anchorReferenceCoordinate = nil
+        defaults.set(false, forKey: DefaultsKey.armed)
+        defaults.set(false, forKey: DefaultsKey.hasReference)
+        lastError = "The previous anchor watch could not be resumed safely. Arm a new watch."
+    }
+
+    private func reconcileAnchorSyncServer() {
+        guard canUseRemoteAnchorWatch else {
+            anchorSyncServer.stop()
+            shoreMonitorConnected = false
+            shoreMonitorSoundReady = false
+            anchorPairingURL = nil
+            return
+        }
+        do {
+            let configuration: AnchorPairingConfiguration
+            if let pairingConfiguration {
+                configuration = pairingConfiguration
+            } else {
+                configuration = try pairingStore.loadOrCreate()
+                pairingConfiguration = configuration
+            }
+            anchorSyncServer.start(pairingKey: configuration.pairingKey)
+            updateAnchorPairingURL()
+        } catch {
+            lastError = "Secure shore-monitor pairing could not be initialized: \(error.localizedDescription)"
+            anchorPairingURL = nil
+        }
+    }
+
     private func persistAnchorConfiguration(armed: Bool? = nil) {
         defaults.set(anchorMode.rawValue, forKey: DefaultsKey.mode)
         defaults.set(anchorRadiusMeters, forKey: DefaultsKey.radius)
@@ -1027,7 +1202,7 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     private func updateAnchorPairingURL() {
-        guard let pairingConfiguration else {
+        guard canUseRemoteAnchorWatch, let pairingConfiguration else {
             anchorPairingURL = nil
             return
         }

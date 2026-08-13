@@ -226,4 +226,79 @@ final class EntitlementPolicyTests: XCTestCase {
         XCTAssertTrue(evidence.isKnownRevoked)
         XCTAssertEqual(evidence.storeStatus, .unavailable)
     }
+
+    func testSessionAccessUsesCurrentEntitlementOrExactActiveLease() throws {
+        let activeRemote = EntitlementDecision(featureLevel: .remoteAnchorWatch)
+        let inactive = EntitlementDecision(featureLevel: .free)
+        let lease = try XCTUnwrap(SessionEntitlementLease.acquire(
+            sessionID: "active-session",
+            requiredFeature: .remoteAnchorWatch,
+            decision: activeRemote,
+            at: Date(timeIntervalSince1970: 1_000)
+        ))
+
+        XCTAssertTrue(EntitlementSessionAccess.authorizes(
+            .remoteAnchorWatch,
+            decision: activeRemote,
+            activeSessionID: nil,
+            lease: nil
+        ))
+        XCTAssertTrue(EntitlementSessionAccess.authorizes(
+            .remoteAnchorWatch,
+            decision: inactive,
+            activeSessionID: "active-session",
+            lease: lease
+        ))
+        XCTAssertFalse(EntitlementSessionAccess.authorizes(
+            .remoteAnchorWatch,
+            decision: inactive,
+            activeSessionID: "different-session",
+            lease: lease
+        ))
+        XCTAssertFalse(EntitlementSessionAccess.authorizes(
+            .remoteAnchorWatch,
+            decision: inactive,
+            activeSessionID: nil,
+            lease: lease
+        ))
+    }
+
+    func testStartingAndUpgradingSessionLeaseNeverExceedsCurrentEntitlement() throws {
+        let anchorDecision = EntitlementDecision(featureLevel: .anchorWatch)
+        let remoteDecision = EntitlementDecision(featureLevel: .remoteAnchorWatch)
+        let now = Date(timeIntervalSince1970: 2_000)
+        let anchorLease = try XCTUnwrap(EntitlementSessionAccess.leaseForStartingSession(
+            sessionID: "session",
+            decision: anchorDecision,
+            at: now
+        ))
+
+        XCTAssertEqual(anchorLease.featureLevel, .anchorWatch)
+        XCTAssertNil(EntitlementSessionAccess.upgradedLease(
+            anchorLease,
+            activeSessionID: "session",
+            decision: anchorDecision,
+            at: now
+        ))
+        XCTAssertNil(EntitlementSessionAccess.upgradedLease(
+            anchorLease,
+            activeSessionID: "different-session",
+            decision: remoteDecision,
+            at: now
+        ))
+        XCTAssertEqual(
+            EntitlementSessionAccess.upgradedLease(
+                anchorLease,
+                activeSessionID: "session",
+                decision: remoteDecision,
+                at: now
+            )?.featureLevel,
+            .remoteAnchorWatch
+        )
+        XCTAssertNil(EntitlementSessionAccess.leaseForStartingSession(
+            sessionID: "free-session",
+            decision: EntitlementDecision(featureLevel: .free),
+            at: now
+        ))
+    }
 }

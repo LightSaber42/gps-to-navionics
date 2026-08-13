@@ -77,6 +77,8 @@ public final class BridgeService extends Service implements LocationListener,
     private static final String KEY_HAS_ANCHOR_REFERENCE = "has_anchor_reference";
     private static final String KEY_ANCHOR_LATITUDE = "anchor_latitude";
     private static final String KEY_ANCHOR_LONGITUDE = "anchor_longitude";
+    private static final String KEY_SESSION_LEASE_MIGRATION_COMPLETED =
+            "session_entitlement_lease_migration_completed_v1";
 
     interface StateListener {
         void onBridgeStateChanged(BridgeState state);
@@ -113,6 +115,14 @@ public final class BridgeService extends Service implements LocationListener,
         void markAnchorReference(double latitude, double longitude) {
             BridgeService.this.markAnchorReference(latitude, longitude);
         }
+
+        void updateEntitlementDecision(EntitlementPolicy.Decision decision) {
+            BridgeService.this.updateEntitlementDecision(decision);
+        }
+
+        boolean canUseRemoteAnchorWatch() {
+            return BridgeService.this.canUseRemoteAnchorWatch();
+        }
     }
 
     private final Object stateLock = new Object();
@@ -131,7 +141,10 @@ public final class BridgeService extends Service implements LocationListener,
     private AnchorHistoryStore anchorHistoryStore;
     private AnchorEventStore anchorEventStore;
     private AnchorPairingStore anchorPairingStore;
-    private AnchorSyncServer anchorSyncServer;
+    private volatile AnchorSyncServer anchorSyncServer;
+    private SessionEntitlementLeaseStore sessionLeaseStore;
+    private SessionEntitlementLease sessionEntitlementLease;
+    private EntitlementPolicy.Decision entitlementDecision;
     private ScheduledFuture<?> monitorTask;
     private PowerManager.WakeLock wakeLock;
     private Ringtone alarmRingtone;
@@ -179,17 +192,20 @@ public final class BridgeService extends Service implements LocationListener,
         anchorHistoryStore = new AnchorHistoryStore(this);
         anchorEventStore = new AnchorEventStore(this);
         anchorPairingStore = new AnchorPairingStore(this);
-        anchorSyncServer = new AnchorSyncServer(this);
+        sessionLeaseStore = new SessionEntitlementLeaseStore(this);
+        EntitlementCache entitlementCache = new EntitlementCacheStore(this).load();
+        entitlementDecision = EntitlementPolicy.evaluate(
+                entitlementCache.unavailableEvidence(
+                        EntitlementPolicy.FeatureLevel.ANCHOR_WATCH),
+                entitlementCache.unavailableEvidence(
+                        EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH),
+                System.currentTimeMillis());
         restoreRenderedAnchorHistory();
-        try {
-            AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
-            anchorSyncServer.start(host.pairingKey, anchorHistoryStore);
-        } catch (GeneralSecurityException pairingError) {
-            error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
-        }
         loadAnchorConfiguration();
+        restoreSessionEntitlementLease();
         createNotificationChannels();
         refreshNetworkAddresses();
+        reconcileAnchorSyncServer();
         updateAnchorSyncState(false);
     }
 
@@ -239,7 +255,9 @@ public final class BridgeService extends Service implements LocationListener,
         }
         server.shutdown();
         udpBroadcaster.stop();
-        anchorSyncServer.shutdown();
+        AnchorSyncServer activeAnchorSyncServer = anchorSyncServer;
+        anchorSyncServer = null;
+        if (activeAnchorSyncServer != null) activeAnchorSyncServer.shutdown();
         scheduler.shutdownNow();
         stopAlarmPresentation();
         releaseWakeLock();
@@ -335,12 +353,135 @@ public final class BridgeService extends Service implements LocationListener,
         }
     }
 
+    private void restoreSessionEntitlementLease() {
+        SessionEntitlementLease storedLease = sessionLeaseStore.load();
+        String sessionId = anchorHistoryStore.sessionId();
+        boolean restoreArmed;
+        synchronized (stateLock) {
+            restoreArmed = anchorAlarmArmed;
+        }
+        if (!restoreArmed) {
+            sessionLeaseStore.clear();
+            sessionEntitlementLease = null;
+            preferences.edit()
+                    .putBoolean(KEY_SESSION_LEASE_MIGRATION_COMPLETED, true)
+                    .commit();
+            return;
+        }
+        if (storedLease != null
+                && storedLease.authorizes(
+                        EntitlementPolicy.FeatureLevel.ANCHOR_WATCH,
+                        sessionId)) {
+            sessionEntitlementLease = storedLease;
+            preferences.edit()
+                    .putBoolean(KEY_SESSION_LEASE_MIGRATION_COMPLETED, true)
+                    .commit();
+            return;
+        }
+
+        boolean migrationCompleted = preferences.getBoolean(
+                KEY_SESSION_LEASE_MIGRATION_COMPLETED,
+                false);
+        if (!migrationCompleted) {
+            if (sessionId == null) sessionId = anchorHistoryStore.startNewSession();
+            EntitlementPolicy.Decision legacyDecision = new EntitlementPolicy.Decision(
+                    EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH);
+            SessionEntitlementLease migrationLease =
+                    EntitlementSessionAccess.leaseForStartingSession(
+                            sessionId,
+                            legacyDecision,
+                            System.currentTimeMillis());
+            if (migrationLease != null && sessionLeaseStore.save(migrationLease)) {
+                sessionEntitlementLease = migrationLease;
+                preferences.edit()
+                        .putBoolean(KEY_SESSION_LEASE_MIGRATION_COMPLETED, true)
+                        .commit();
+                return;
+            }
+        }
+
+        sessionLeaseStore.clear();
+        sessionEntitlementLease = null;
+        synchronized (stateLock) {
+            anchorAlarmArmed = false;
+            hasAnchorReference = false;
+            error = "The previous anchor watch could not be resumed safely. Arm a new watch.";
+        }
+        preferences.edit()
+                .putBoolean(KEY_ANCHOR_ARMED, false)
+                .putBoolean(KEY_HAS_ANCHOR_REFERENCE, false)
+                .putBoolean(KEY_SESSION_LEASE_MIGRATION_COMPLETED, true)
+                .commit();
+    }
+
+    private void updateEntitlementDecision(EntitlementPolicy.Decision decision) {
+        if (decision == null || decision.featureLevel == null) return;
+        SessionEntitlementLease upgradedLease = null;
+        synchronized (stateLock) {
+            entitlementDecision = decision;
+            if (anchorAlarmArmed && sessionEntitlementLease != null) {
+                upgradedLease = EntitlementSessionAccess.upgradedLease(
+                        sessionEntitlementLease,
+                        anchorHistoryStore.sessionId(),
+                        decision,
+                        System.currentTimeMillis());
+            }
+        }
+        if (upgradedLease != null && sessionLeaseStore.save(upgradedLease)) {
+            synchronized (stateLock) {
+                sessionEntitlementLease = upgradedLease;
+            }
+        }
+        reconcileAnchorSyncServer();
+        emitState();
+    }
+
+    private boolean hasCurrentAnchorEntitlement() {
+        synchronized (stateLock) {
+            return entitlementDecision != null
+                    && entitlementDecision.featureLevel.includes(
+                            EntitlementPolicy.FeatureLevel.ANCHOR_WATCH);
+        }
+    }
+
+    private boolean canUseAnchorWatch() {
+        synchronized (stateLock) {
+            return EntitlementSessionAccess.authorizes(
+                    EntitlementPolicy.FeatureLevel.ANCHOR_WATCH,
+                    entitlementDecision,
+                    anchorAlarmArmed ? anchorHistoryStore.sessionId() : null,
+                    sessionEntitlementLease);
+        }
+    }
+
+    private boolean canUseRemoteAnchorWatch() {
+        synchronized (stateLock) {
+            return EntitlementSessionAccess.authorizes(
+                    EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH,
+                    entitlementDecision,
+                    anchorAlarmArmed ? anchorHistoryStore.sessionId() : null,
+                    sessionEntitlementLease);
+        }
+    }
+
+    private boolean sessionLeaseAuthorizesLocked(
+            EntitlementPolicy.FeatureLevel requiredFeature
+    ) {
+        return sessionEntitlementLease != null
+                && sessionEntitlementLease.authorizes(
+                        requiredFeature,
+                        anchorHistoryStore.sessionId());
+    }
+
     private void restoreDesiredMonitoring() {
         boolean shouldStream = preferences.getBoolean(KEY_STREAMING, false);
         boolean shouldArmAnchor = preferences.getBoolean(KEY_ANCHOR_ARMED, false);
         synchronized (stateLock) {
             streaming = shouldStream;
-            anchorAlarmArmed = shouldArmAnchor && hasAnchorReference;
+            anchorAlarmArmed = shouldArmAnchor
+                    && hasAnchorReference
+                    && sessionLeaseAuthorizesLocked(
+                            EntitlementPolicy.FeatureLevel.ANCHOR_WATCH);
             anchorArmedElapsedMillis = SystemClock.elapsedRealtime();
         }
         if (streaming) startNetworkTransports();
@@ -382,6 +523,13 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void beginAnchorSetup(Intent intent) {
+        if (!hasCurrentAnchorEntitlement()) {
+            synchronized (stateLock) {
+                error = "Unlock Anchor Watch before starting a new watch.";
+            }
+            emitState();
+            return;
+        }
         AnchorAlarm.Mode mode = AnchorAlarm.Mode.fromStorageValue(
                 intent.getStringExtra(EXTRA_ANCHOR_MODE));
         double radius = mode.adjustedRadius(intent.getDoubleExtra(
@@ -421,6 +569,13 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void armAnchorAlarm(Intent intent) {
+        if (!hasCurrentAnchorEntitlement()) {
+            synchronized (stateLock) {
+                error = "Unlock Anchor Watch before starting a new watch.";
+            }
+            emitState();
+            return;
+        }
         if (!hasFineLocationPermission()) {
             synchronized (stateLock) {
                 error = "Precise Location permission is required for the anchor alarm.";
@@ -442,10 +597,28 @@ public final class BridgeService extends Service implements LocationListener,
         }
 
         boolean wasLayingAnchor;
+        EntitlementPolicy.Decision decisionSnapshot;
         synchronized (stateLock) {
             wasLayingAnchor = anchorSetupActive
                     && mode == AnchorAlarm.Mode.FREE_SWINGING
                     && hasAnchorReference;
+            decisionSnapshot = entitlementDecision;
+        }
+        String sessionId = wasLayingAnchor ? anchorHistoryStore.sessionId() : null;
+        if (sessionId == null) sessionId = anchorHistoryStore.startNewSession();
+        SessionEntitlementLease lease = EntitlementSessionAccess.leaseForStartingSession(
+                sessionId,
+                decisionSnapshot,
+                System.currentTimeMillis());
+        if (lease == null || !sessionLeaseStore.save(lease)) {
+            synchronized (stateLock) {
+                error = "Anchor Watch access could not be saved safely. Try arming again.";
+            }
+            emitState();
+            return;
+        }
+        synchronized (stateLock) {
+            sessionEntitlementLease = lease;
             anchorSetupActive = false;
             anchorMode = mode;
             anchorRadiusMeters = radius;
@@ -468,13 +641,13 @@ public final class BridgeService extends Service implements LocationListener,
             criticalBatteryEventIssued = false;
             error = null;
         }
-        if (!wasLayingAnchor) anchorHistoryStore.startNewSession();
         persistAnchorConfiguration(true);
         stopAlarmPresentation();
         ensureMonitoringInfrastructure();
         Location location = copyLatestLocation();
         if (location != null) evaluateAnchorPosition(location);
         emitState();
+        reconcileAnchorSyncServer();
         updateAnchorSyncState(true);
     }
 
@@ -491,6 +664,8 @@ public final class BridgeService extends Service implements LocationListener,
             breachStartedElapsedMillis = 0L;
         }
         anchorEventStore.acknowledgeAll();
+        sessionEntitlementLease = null;
+        sessionLeaseStore.clear();
         preferences.edit()
                 .putBoolean(KEY_ANCHOR_ARMED, false)
                 .putBoolean(KEY_HAS_ANCHOR_REFERENCE, false)
@@ -499,6 +674,7 @@ public final class BridgeService extends Service implements LocationListener,
         stopMonitoringInfrastructureIfIdle();
         emitState();
         updateAnchorSyncState(true);
+        reconcileAnchorSyncServer();
     }
 
     private void silenceAnchorAlarm() {
@@ -517,6 +693,13 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void updateAnchorSettings(AnchorAlarm.Mode mode, double radiusMeters) {
+        if (!canUseAnchorWatch()) {
+            synchronized (stateLock) {
+                error = "Unlock Anchor Watch before changing watch settings.";
+            }
+            emitState();
+            return;
+        }
         boolean adjustedWhileArmed = false;
         synchronized (stateLock) {
             if (anchorAlarmArmed) {
@@ -549,9 +732,9 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void markAnchorReference(double latitude, double longitude) {
-        if (!validCoordinate(latitude, longitude)) return;
+        if (!validCoordinate(latitude, longitude) || !hasCurrentAnchorEntitlement()) return;
         synchronized (stateLock) {
-            if (anchorAlarmArmed) return;
+            if (anchorAlarmArmed || !anchorSetupActive) return;
             anchorSetupActive = true;
             hasAnchorReference = true;
             anchorReferenceLatitude = latitude;
@@ -910,9 +1093,17 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void reloadAnchorPairing() {
+        if (!canUseRemoteAnchorWatch()) {
+            synchronized (stateLock) {
+                error = "Remote Anchor Watch is required to create a pairing code.";
+            }
+            emitState();
+            return;
+        }
         try {
-            AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
-            anchorSyncServer.rotatePairingKey(host.pairingKey);
+            AnchorPairingStore.HostConfiguration host = anchorPairingStore.rotateHost();
+            AnchorSyncServer activeServer = anchorSyncServer;
+            if (activeServer != null) activeServer.rotatePairingKey(host.pairingKey);
             synchronized (stateLock) {
                 shoreMonitorConnected = false;
                 shoreMonitorSoundReady = false;
@@ -922,11 +1113,38 @@ public final class BridgeService extends Service implements LocationListener,
                 error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
             }
         }
+        reconcileAnchorSyncServer();
         emitState();
     }
 
+    private void reconcileAnchorSyncServer() {
+        if (!canUseRemoteAnchorWatch()) {
+            AnchorSyncServer previousServer = anchorSyncServer;
+            anchorSyncServer = null;
+            if (previousServer != null) previousServer.shutdown();
+            synchronized (stateLock) {
+                shoreMonitorConnected = false;
+                shoreMonitorSoundReady = false;
+            }
+            return;
+        }
+        if (anchorSyncServer != null) return;
+        try {
+            AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
+            AnchorSyncServer newServer = new AnchorSyncServer(this);
+            anchorSyncServer = newServer;
+            newServer.start(host.pairingKey, anchorHistoryStore);
+            updateAnchorSyncState(false);
+        } catch (GeneralSecurityException pairingError) {
+            synchronized (stateLock) {
+                error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
+            }
+        }
+    }
+
     private void updateAnchorSyncState(boolean sendImmediately) {
-        if (anchorSyncServer == null || anchorHistoryStore == null || anchorEventStore == null) return;
+        AnchorSyncServer activeServer = anchorSyncServer;
+        if (activeServer == null || anchorHistoryStore == null || anchorEventStore == null) return;
         BridgeState state = snapshot();
         BatterySnapshot battery = batterySnapshot();
         String sessionId = anchorHistoryStore.sessionId();
@@ -942,8 +1160,8 @@ public final class BridgeService extends Service implements LocationListener,
                 battery.charging,
                 System.currentTimeMillis(),
                 anchorEventStore.eventsForSession(sessionId));
-        anchorSyncServer.updateState(syncState);
-        if (sendImmediately) anchorSyncServer.sendStateNow();
+        activeServer.updateState(syncState);
+        if (sendImmediately) activeServer.sendStateNow();
     }
 
     private BatterySnapshot batterySnapshot() {
