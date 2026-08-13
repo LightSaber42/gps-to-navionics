@@ -50,11 +50,11 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Confirm current branch and preserve unrelated uncommitted GPS-quality work.
 - [x] Inventory existing iOS/Android metadata, identifiers, versions, manifests, entitlements, tests, and build scripts.
 - [x] Confirm there is no existing billing, account, entitlement, paywall, privacy manifest, store metadata, or release-signing pipeline.
-- [ ] Verify current StoreKit 2 subscription/non-consumable requirements against Apple documentation.
-- [ ] Verify current Google Play Billing integration, acknowledgement, pending purchase, and subscription requirements against Android documentation.
-- [ ] Audit App Store background-mode usage and permission descriptions for reviewer defensibility.
-- [ ] Audit Android permissions, foreground-service declarations, backup behavior, exported components, and target-SDK requirements.
-- [ ] Audit Apple privacy manifest/API-reason requirements and Google Play Data Safety declarations.
+- [x] Verify current StoreKit 2 subscription/non-consumable requirements against Apple documentation. See `docs/RELEASE_AUDIT.md`.
+- [x] Verify current Google Play Billing integration, acknowledgement, pending purchase, and subscription requirements against Android documentation. See `docs/RELEASE_AUDIT.md`.
+- [x] Audit App Store background-mode usage and permission descriptions for reviewer defensibility. See `docs/RELEASE_AUDIT.md`.
+- [x] Audit Android permissions, foreground-service declarations, backup behavior, exported components, and target-SDK requirements. See `docs/RELEASE_AUDIT.md`.
+- [x] Audit Apple privacy manifest/API-reason requirements and Google Play Data Safety declarations. See `docs/RELEASE_AUDIT.md`.
 
 ## 2. Shared commercial model
 
