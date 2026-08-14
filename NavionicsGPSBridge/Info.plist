@@ -20,6 +20,12 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>AnchorWatchPrivacyURL</key>
+	<string>https://anchor-watch.invalid/privacy</string>
+	<key>AnchorWatchSupportURL</key>
+	<string>https://anchor-watch.invalid/support</string>
+	<key>AnchorWatchTermsURL</key>
+	<string>https://anchor-watch.invalid/terms</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.navigation</string>
 	<key>LSRequiresIPhoneOS</key>

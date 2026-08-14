@@ -498,6 +498,7 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams refreshParams = wrapWrap();
         refreshParams.topMargin = dp(6);
         checkout.addView(refresh, refreshParams);
+        addReleasePolicyLinks(checkout);
 
         TextView safety = text(
                 "Anchor Watch is an auxiliary aid, not a certified navigation or safety "
@@ -916,6 +917,7 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams monitorParams = wrapWrap();
         monitorParams.topMargin = dp(6);
         card.addView(monitor, monitorParams);
+        addReleasePolicyLinks(card);
 
         card.addView(remoteOffer, matchWrap());
         RemoteOfferViews views = new RemoteOfferViews(
@@ -2169,6 +2171,31 @@ public final class MainActivity extends Activity implements
                     Intent.ACTION_VIEW,
                     Uri.parse("https://play.google.com/store/account/subscriptions")));
         }
+    }
+
+    private void addReleasePolicyLinks(LinearLayout parent) {
+        LinearLayout links = horizontal();
+        links.setGravity(Gravity.CENTER_VERTICAL);
+        addReleasePolicyLink(links, "Privacy", R.string.anchor_watch_privacy_url);
+        addReleasePolicyLink(links, "Support", R.string.anchor_watch_support_url);
+        addReleasePolicyLink(links, "Terms", R.string.anchor_watch_terms_url);
+        LinearLayout.LayoutParams linksParams = matchWrap();
+        linksParams.topMargin = dp(8);
+        parent.addView(links, linksParams);
+    }
+
+    private void addReleasePolicyLink(LinearLayout parent, String title, int resourceId) {
+        Button button = smallButton(title, () -> ReleaseLinks.open(this, resourceId));
+        boolean configured = ReleaseLinks.configuredUri(this, resourceId) != null;
+        button.setEnabled(configured);
+        if (!configured) {
+            button.setContentDescription(title + " link pending release configuration");
+        }
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1.0f);
+        parent.addView(button, params);
     }
 
     private boolean isLocationRestrictedByPowerSaving() {

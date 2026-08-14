@@ -414,6 +414,8 @@ struct ContentView: View {
                 }
                 .disabled(purchaseActionInProgress)
 
+                releasePolicyLinks
+
                 Text("Anchor Watch is an auxiliary aid, not a certified navigation or safety system. Test alarms before relying on it and keep an independent anchor watch and navigation backup.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -727,6 +729,8 @@ struct ContentView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            releasePolicyLinks
         }
         .cardStyle()
     }
@@ -778,6 +782,27 @@ struct ContentView: View {
                 )
             }
             .font(.subheadline)
+        }
+    }
+
+    private var releasePolicyLinks: some View {
+        HStack(spacing: 14) {
+            configuredReleaseLink("Privacy", destination: ReleaseLinks.privacy)
+            configuredReleaseLink("Support", destination: ReleaseLinks.support)
+            configuredReleaseLink("Terms", destination: ReleaseLinks.terms)
+        }
+        .font(.footnote)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func configuredReleaseLink(_ title: String, destination: URL?) -> some View {
+        if let destination {
+            Link(title, destination: destination)
+        } else {
+            Text(title)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("\(title) link pending release configuration")
         }
     }
 

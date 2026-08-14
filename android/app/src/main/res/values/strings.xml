@@ -5,6 +5,9 @@
     <string name="notification_channel_description">Keeps GPS streaming and an armed anchor watch running while the screen is locked.</string>
     <string name="anchor_alarm_channel_name">Anchor alarm alerts</string>
     <string name="anchor_alarm_channel_description">Urgent drift and GPS-loss alerts from the anchor watch.</string>
+    <string name="anchor_watch_privacy_url" translatable="false">https://anchor-watch.invalid/privacy</string>
+    <string name="anchor_watch_support_url" translatable="false">https://anchor-watch.invalid/support</string>
+    <string name="anchor_watch_terms_url" translatable="false">https://anchor-watch.invalid/terms</string>
     <!-- Replace with the app's Licensing &amp; In-App Billing public key from Play Console. -->
     <string name="play_billing_public_key" translatable="false"></string>
 </resources>

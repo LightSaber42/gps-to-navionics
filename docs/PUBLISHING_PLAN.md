@@ -158,7 +158,7 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Draft privacy policy covering local GPS/history, direct paired transport, store billing, diagnostics, and deletion behavior.
 - [x] Draft support documentation for permissions, alarm testing, battery/power settings, force-quit/reboot limits, purchase restoration, subscription management, Tailscale, and Android-only shore monitoring.
 - [x] Draft terms/subscription terms and auxiliary-safety disclaimer.
-- [ ] Add in-app links using placeholder configuration until the public domain is known.
+- [x] Add in-app links using placeholder configuration until the public domain is known.
 - [ ] Replace every placeholder with live HTTPS URLs before submission.
 - [x] Add a non-affiliation statement for Navionics/Garmin compatibility references.
 

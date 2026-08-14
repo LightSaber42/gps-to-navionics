@@ -31,6 +31,7 @@
 		D10000000000000000000003 /* PurchaseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* PurchaseStore.swift */; };
 		E10000000000000000000001 /* DisplayUnits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DisplayUnits.swift */; };
 		F10000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* PrivacyInfo.xcprivacy */; };
+		G10000000000000000000001 /* ReleaseLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = G20000000000000000000001 /* ReleaseLinks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +73,7 @@
 		D20000000000000000000004 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
 		E20000000000000000000001 /* DisplayUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayUnits.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		G20000000000000000000001 /* ReleaseLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseLinks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +127,7 @@
 				D20000000000000000000002 /* EntitlementPolicy.swift */,
 				D20000000000000000000003 /* PurchaseStore.swift */,
 				E20000000000000000000001 /* DisplayUnits.swift */,
+				G20000000000000000000001 /* ReleaseLinks.swift */,
 				B20000000000000000000002 /* BridgeController.swift */,
 				B20000000000000000000003 /* ContentView.swift */,
 			);
@@ -292,6 +295,7 @@
 				D10000000000000000000002 /* EntitlementPolicy.swift in Sources */,
 				D10000000000000000000003 /* PurchaseStore.swift in Sources */,
 				E10000000000000000000001 /* DisplayUnits.swift in Sources */,
+				G10000000000000000000001 /* ReleaseLinks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
