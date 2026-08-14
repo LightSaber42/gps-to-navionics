@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -28,6 +29,7 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -86,7 +88,7 @@ public final class MainActivity extends Activity implements
     private int pendingPermissionAction;
     private long pendingAnchorFixStartedElapsedNanos;
     private boolean anchorSetupRequested;
-    private int selectedSection = SECTION_BRIDGE;
+    private int selectedSection = SECTION_ANCHOR;
     private boolean lastRenderedAnchorArmed;
     private boolean lastRenderedAnchorTriggered;
     private AnchorAlarm.Mode selectedAnchorMode = AnchorAlarm.Mode.SHORELINED;
@@ -96,6 +98,7 @@ public final class MainActivity extends Activity implements
     private TextView pageTitle;
     private LinearLayout normalDashboard;
     private LinearLayout anchorDashboard;
+    private LinearLayout anchorPurchasePreview;
     private LinearLayout disarmedAnchorDashboard;
     private LinearLayout armedAnchorContainer;
     private LinearLayout armedAnchorDashboard;
@@ -156,6 +159,38 @@ public final class MainActivity extends Activity implements
     private TextView armedGpsAccuracyWarningBody;
     private TextView normalShoreMonitorValue;
     private TextView armedShoreMonitorValue;
+    private TextView anchorPurchasePrice;
+    private Button anchorPurchaseButton;
+    private TextView anchorPurchaseStatus;
+    private final List<RemoteOfferViews> remoteOfferViews = new ArrayList<>();
+
+    private static final class RemoteOfferViews {
+        final LinearLayout offerContainer;
+        final CheckBox companionConfirmation;
+        final Button monthlyButton;
+        final Button annualButton;
+        final TextView purchaseStatus;
+        final Button pairingButton;
+        final Button manageButton;
+
+        RemoteOfferViews(
+                LinearLayout offerContainer,
+                CheckBox companionConfirmation,
+                Button monthlyButton,
+                Button annualButton,
+                TextView purchaseStatus,
+                Button pairingButton,
+                Button manageButton
+        ) {
+            this.offerContainer = offerContainer;
+            this.companionConfirmation = companionConfirmation;
+            this.monthlyButton = monthlyButton;
+            this.annualButton = annualButton;
+            this.purchaseStatus = purchaseStatus;
+            this.pairingButton = pairingButton;
+            this.manageButton = manageButton;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -238,6 +273,7 @@ public final class MainActivity extends Activity implements
             if (binder != null) {
                 binder.updateEntitlementDecision(snapshot.entitlementDecision);
             }
+            render(latestState);
         });
     }
 
@@ -269,11 +305,21 @@ public final class MainActivity extends Activity implements
             return insets;
         });
 
-        pageTitle = text("GPS Bridge", 28, R.color.nav_text);
+        pageTitle = text("Anchor Watch", 28, R.color.nav_text);
         pageTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         pageTitle.setPadding(dp(4), dp(10), 0, dp(12));
         content.addView(pageTitle, matchWrap());
         content.addView(buildSectionSwitcher(), cardParams());
+
+        if (isDebuggableBuild()) {
+            TextView debugBanner = text(
+                    "DEBUG BUILD · GOOGLE PLAY LICENSING IS TEST-ONLY",
+                    12,
+                    R.color.nav_warning);
+            debugBanner.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            debugBanner.setPadding(dp(4), 0, dp(4), dp(12));
+            content.addView(debugBanner, matchWrap());
+        }
 
         normalDashboard = new LinearLayout(this);
         normalDashboard.setOrientation(LinearLayout.VERTICAL);
@@ -290,6 +336,8 @@ public final class MainActivity extends Activity implements
         content.addView(normalDashboard, matchWrap());
 
         anchorDashboard = vertical();
+        anchorPurchasePreview = buildAnchorPurchasePreview();
+        anchorDashboard.addView(anchorPurchasePreview, matchWrap());
         disarmedAnchorDashboard = vertical();
         disarmedAnchorDashboard.addView(buildAnchorAlarmCard(), cardParams());
         LinearLayout anchorDetails = vertical();
@@ -310,8 +358,106 @@ public final class MainActivity extends Activity implements
         armedAnchorContainer.addView(safetyNote(), matchWrap());
         anchorDashboard.addView(armedAnchorContainer, matchWrap());
         content.addView(anchorDashboard, matchWrap());
-        selectSection(SECTION_BRIDGE, false);
+        selectSection(SECTION_ANCHOR, false);
         return pageScrollView;
+    }
+
+    private LinearLayout buildAnchorPurchasePreview() {
+        LinearLayout preview = vertical();
+
+        LinearLayout introduction = card();
+        TextView title = text("Anchor Watch", 28, R.color.nav_text);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        introduction.addView(title, matchWrap());
+        TextView summary = text(
+                "Turn the boat phone into a local drift and GPS-loss alarm. Choose a "
+                        + "shore-tied position or a free-swinging anchor circle, then keep "
+                        + "the phone aboard and powered.",
+                14,
+                R.color.nav_secondary);
+        summary.setLineSpacing(0.0f, 1.14f);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(7);
+        introduction.addView(summary, summaryParams);
+        addPurchaseBenefit(
+                introduction,
+                "Two anchoring modes",
+                "Shorelined watches the tied boat position; Free swinging follows a marked anchor-drop point.");
+        addPurchaseBenefit(
+                introduction,
+                "Durable watch history",
+                "See the current trail, alarm boundary, GPS accuracy, and durable alarm events.");
+        addPurchaseBenefit(
+                introduction,
+                "Local safety alarms",
+                "Drift confirms for 5 seconds and GPS loss alarms after 30 seconds while armed.");
+        preview.addView(introduction, cardParams());
+
+        LinearLayout tiers = card();
+        addCardHeader(tiers, "Choose your level");
+        addTierSummary(tiers, "NMEA Stream", "Free", "GPS-to-NMEA streaming stays free.");
+        addDivider(tiers);
+        anchorPurchasePrice = addTierSummary(
+                tiers,
+                "Anchor Watch",
+                "Price loading…",
+                "One-time purchase on this Google Play account.");
+        addDivider(tiers);
+        addTierSummary(
+                tiers,
+                "Remote Anchor Watch",
+                "Optional add-on",
+                "Requires Anchor Watch, a separate Android shore phone, and a monthly or annual subscription.");
+        preview.addView(tiers, cardParams());
+
+        LinearLayout checkout = card();
+        addCardHeader(checkout, "Unlock Anchor Watch");
+        TextView ownership = text(
+                "This is a one-time, platform-specific purchase. It restores only with "
+                        + "the same Google Play account and does not transfer to Apple.",
+                13,
+                R.color.nav_secondary);
+        ownership.setLineSpacing(0.0f, 1.12f);
+        checkout.addView(ownership, matchWrap());
+
+        anchorPurchaseButton = actionButton("Loading Google Play price…", R.color.nav_blue);
+        anchorPurchaseButton.setEnabled(false);
+        anchorPurchaseButton.setOnClickListener(view -> billingStore.purchaseAnchorWatch(this));
+        LinearLayout.LayoutParams purchaseParams = matchWrap();
+        purchaseParams.topMargin = dp(12);
+        checkout.addView(anchorPurchaseButton, purchaseParams);
+
+        anchorPurchaseStatus = text("", 13, R.color.nav_secondary);
+        anchorPurchaseStatus.setLineSpacing(0.0f, 1.12f);
+        anchorPurchaseStatus.setVisibility(View.GONE);
+        LinearLayout.LayoutParams statusParams = matchWrap();
+        statusParams.topMargin = dp(8);
+        checkout.addView(anchorPurchaseStatus, statusParams);
+
+        Button refresh = smallButton("Restore / refresh purchases", () -> billingStore.refresh());
+        LinearLayout.LayoutParams refreshParams = wrapWrap();
+        refreshParams.topMargin = dp(6);
+        checkout.addView(refresh, refreshParams);
+
+        TextView safety = text(
+                "Anchor Watch is an auxiliary aid, not a certified navigation or safety "
+                        + "system. Test alarms before relying on it and keep an independent "
+                        + "anchor watch and navigation backup.",
+                12,
+                R.color.nav_secondary);
+        safety.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams safetyParams = matchWrap();
+        safetyParams.topMargin = dp(8);
+        checkout.addView(safety, safetyParams);
+
+        Button shoreMonitor = smallButton(
+                "Use this phone as shore monitor",
+                () -> startActivity(new Intent(this, ShoreMonitorActivity.class)));
+        LinearLayout.LayoutParams shoreParams = wrapWrap();
+        shoreParams.topMargin = dp(8);
+        checkout.addView(shoreMonitor, shoreParams);
+        preview.addView(checkout, cardParams());
+        return preview;
     }
 
     private LinearLayout buildArmedAnchorDashboard() {
@@ -607,7 +753,8 @@ public final class MainActivity extends Activity implements
         LinearLayout card = card();
         addCardHeader(card, "Optional shore monitor");
         TextView description = text(
-                "Add an Android phone for backup remote and connection-loss alerts. Remote use requires Tailscale or another VPN on both phones.",
+                "Add a separate Android phone for read-only remote status, durable alarm "
+                        + "replay, and connection-loss alerts.",
                 13,
                 R.color.nav_secondary);
         description.setLineSpacing(0.0f, 1.12f);
@@ -622,11 +769,101 @@ public final class MainActivity extends Activity implements
         pairParams.topMargin = dp(10);
         card.addView(pair, pairParams);
 
+        LinearLayout remoteOffer = vertical();
+        addDivider(remoteOffer);
+        TextView offerTitle = text("Add Remote Anchor Watch", 16, R.color.nav_text);
+        offerTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        remoteOffer.addView(offerTitle, matchWrap());
+        TextView requirement = text(
+                "Requires a separate Android phone; an iPhone or iPad cannot act as the shore monitor.",
+                14,
+                R.color.nav_text);
+        requirement.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        LinearLayout.LayoutParams requirementParams = matchWrap();
+        requirementParams.topMargin = dp(8);
+        remoteOffer.addView(requirement, requirementParams);
+        TextView connectivity = text(
+                "Both phones must be reachable on the same LAN or through your own "
+                        + "Tailscale/equivalent VPN. The app provides no developer-operated internet relay.",
+                12,
+                R.color.nav_secondary);
+        connectivity.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams connectivityParams = matchWrap();
+        connectivityParams.topMargin = dp(6);
+        remoteOffer.addView(connectivity, connectivityParams);
+
+        CheckBox companionConfirmation = new CheckBox(this);
+        companionConfirmation.setText("I have a separate Android phone for shore monitoring");
+        companionConfirmation.setTextSize(13);
+        companionConfirmation.setTextColor(getColor(R.color.nav_text));
+        LinearLayout.LayoutParams confirmationParams = matchWrap();
+        confirmationParams.topMargin = dp(8);
+        remoteOffer.addView(companionConfirmation, confirmationParams);
+
+        Button monthly = actionButton("Monthly · Price loading…", R.color.nav_secondary);
+        monthly.setEnabled(false);
+        monthly.setOnClickListener(view -> billingStore.purchaseRemote(
+                this,
+                StoreProductIdentifiers.REMOTE_MONTHLY_BASE_PLAN,
+                companionConfirmation.isChecked()));
+        LinearLayout.LayoutParams monthlyParams = matchWrap();
+        monthlyParams.topMargin = dp(8);
+        remoteOffer.addView(monthly, monthlyParams);
+
+        Button annual = actionButton("Annual · Best value · Price loading…", R.color.nav_blue);
+        annual.setEnabled(false);
+        annual.setOnClickListener(view -> billingStore.purchaseRemote(
+                this,
+                StoreProductIdentifiers.REMOTE_ANNUAL_BASE_PLAN,
+                companionConfirmation.isChecked()));
+        LinearLayout.LayoutParams annualParams = matchWrap();
+        annualParams.topMargin = dp(8);
+        remoteOffer.addView(annual, annualParams);
+
+        TextView purchaseStatus = text("", 13, R.color.nav_secondary);
+        purchaseStatus.setLineSpacing(0.0f, 1.12f);
+        purchaseStatus.setVisibility(View.GONE);
+        LinearLayout.LayoutParams statusParams = matchWrap();
+        statusParams.topMargin = dp(8);
+        remoteOffer.addView(purchaseStatus, statusParams);
+
+        TextView renewal = text(
+                "Subscriptions auto-renew for the selected billing period unless cancelled. "
+                        + "Manage or cancel through Google Play. Access is platform-specific "
+                        + "and does not transfer to Apple.",
+                12,
+                R.color.nav_secondary);
+        renewal.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams renewalParams = matchWrap();
+        renewalParams.topMargin = dp(8);
+        remoteOffer.addView(renewal, renewalParams);
+
+        Button refresh = smallButton("Restore / refresh purchases", () -> billingStore.refresh());
+        remoteOffer.addView(refresh, wrapWrap());
+
+        Button manage = smallButton(
+                "Manage Google Play subscription",
+                this::openPlaySubscriptionManagement);
+        card.addView(manage, wrapWrap());
+
         Button monitor = smallButton("Use this phone as shore monitor", () -> startActivity(
                 new Intent(this, ShoreMonitorActivity.class)));
         LinearLayout.LayoutParams monitorParams = wrapWrap();
         monitorParams.topMargin = dp(6);
         card.addView(monitor, monitorParams);
+
+        card.addView(remoteOffer, matchWrap());
+        RemoteOfferViews views = new RemoteOfferViews(
+                remoteOffer,
+                companionConfirmation,
+                monthly,
+                annual,
+                purchaseStatus,
+                pair,
+                manage);
+        remoteOfferViews.add(views);
+        companionConfirmation.setOnCheckedChangeListener(
+                (button, checked) -> render(latestState));
         return card;
     }
 
@@ -712,9 +949,21 @@ public final class MainActivity extends Activity implements
         boolean armedScreen = state.anchorAlarmArmed
                 || state.anchorSetupActive
                 || anchorSetupRequested;
-        pageTitle.setText("GPS Bridge");
-        disarmedAnchorDashboard.setVisibility(armedScreen ? View.GONE : View.VISIBLE);
+        boolean ownsAnchorWatch = billingSnapshot != null
+                && billingSnapshot.entitlementDecision.featureLevel.includes(
+                        EntitlementPolicy.FeatureLevel.ANCHOR_WATCH);
+        boolean canUseRemoteAnchorWatch = billingSnapshot != null
+                && billingSnapshot.entitlementDecision.featureLevel.includes(
+                        EntitlementPolicy.FeatureLevel.REMOTE_ANCHOR_WATCH);
+        if (binder != null && binder.canUseRemoteAnchorWatch()) {
+            canUseRemoteAnchorWatch = true;
+        }
+        anchorPurchasePreview.setVisibility(
+                !ownsAnchorWatch && !armedScreen ? View.VISIBLE : View.GONE);
+        disarmedAnchorDashboard.setVisibility(
+                ownsAnchorWatch && !armedScreen ? View.VISIBLE : View.GONE);
         armedAnchorContainer.setVisibility(armedScreen ? View.VISIBLE : View.GONE);
+        renderBillingUi(ownsAnchorWatch, canUseRemoteAnchorWatch);
         if (armedScreen && !lastRenderedAnchorArmed) {
             selectSection(SECTION_ANCHOR, true);
         }
@@ -788,6 +1037,102 @@ public final class MainActivity extends Activity implements
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
+    }
+
+    private void renderBillingUi(
+            boolean ownsAnchorWatch,
+            boolean canUseRemoteAnchorWatch
+    ) {
+        PlayBillingStore.ProductOffer anchorOffer = billingSnapshot == null
+                ? null : billingSnapshot.anchorWatchOffer;
+        boolean billingBusy = billingSnapshot != null
+                && (billingSnapshot.actionState == PlayBillingStore.ActionState.CONNECTING
+                || billingSnapshot.actionState == PlayBillingStore.ActionState.PURCHASING);
+
+        String anchorPrice = anchorOffer == null ? "Price loading…" : anchorOffer.formattedPrice;
+        anchorPurchasePrice.setText(anchorPrice);
+        anchorPurchaseButton.setText(anchorOffer == null
+                ? "Loading Google Play price…"
+                : "Unlock Anchor Watch · " + anchorOffer.formattedPrice);
+        anchorPurchaseButton.setEnabled(anchorOffer != null && !billingBusy);
+
+        String billingMessage = billingStatusMessage(false);
+        setBillingStatus(
+                anchorPurchaseStatus,
+                billingMessage,
+                billingStatusColor());
+
+        for (RemoteOfferViews views : remoteOfferViews) {
+            views.offerContainer.setVisibility(
+                    ownsAnchorWatch && !canUseRemoteAnchorWatch
+                            ? View.VISIBLE : View.GONE);
+            views.pairingButton.setVisibility(
+                    canUseRemoteAnchorWatch ? View.VISIBLE : View.GONE);
+            views.manageButton.setVisibility(ownsAnchorWatch ? View.VISIBLE : View.GONE);
+
+            PlayBillingStore.ProductOffer monthlyOffer = billingSnapshot == null
+                    ? null : billingSnapshot.remoteMonthlyOffer;
+            PlayBillingStore.ProductOffer annualOffer = billingSnapshot == null
+                    ? null : billingSnapshot.remoteAnnualOffer;
+            views.monthlyButton.setText(monthlyOffer == null
+                    ? "Monthly · Price loading…"
+                    : "Monthly · " + monthlyOffer.formattedPrice);
+            views.annualButton.setText(annualOffer == null
+                    ? "Annual · Best value · Price loading…"
+                    : "Annual · Best value · " + annualOffer.formattedPrice);
+            boolean checkoutConfirmed = views.companionConfirmation.isChecked();
+            views.monthlyButton.setEnabled(
+                    monthlyOffer != null && checkoutConfirmed && !billingBusy);
+            views.annualButton.setEnabled(
+                    annualOffer != null && checkoutConfirmed && !billingBusy);
+
+            String remoteMessage = billingStatusMessage(canUseRemoteAnchorWatch);
+            setBillingStatus(
+                    views.purchaseStatus,
+                    remoteMessage,
+                    canUseRemoteAnchorWatch
+                            ? R.color.nav_success : billingStatusColor());
+        }
+    }
+
+    private String billingStatusMessage(boolean remoteActive) {
+        if (billingSnapshot == null) return "Connecting to Google Play…";
+        switch (billingSnapshot.actionState) {
+            case CONNECTING:
+                return "Connecting to Google Play…";
+            case PURCHASING:
+                return "Waiting for Google Play…";
+            case PENDING:
+                return billingSnapshot.message == null
+                        ? "Payment is pending. Access unlocks after Google Play confirms it."
+                        : billingSnapshot.message;
+            case CANCELLED:
+                return "Purchase cancelled. Nothing was charged.";
+            case ERROR:
+                return billingSnapshot.message == null
+                        ? "Google Play could not complete the request."
+                        : billingSnapshot.message;
+            case IDLE:
+            default:
+                return remoteActive ? "Remote subscription active" : null;
+        }
+    }
+
+    private int billingStatusColor() {
+        if (billingSnapshot == null) return R.color.nav_secondary;
+        if (billingSnapshot.actionState == PlayBillingStore.ActionState.ERROR) {
+            return R.color.nav_error;
+        }
+        if (billingSnapshot.actionState == PlayBillingStore.ActionState.PENDING) {
+            return R.color.nav_warning;
+        }
+        return R.color.nav_secondary;
+    }
+
+    private void setBillingStatus(TextView view, String message, int colorResource) {
+        view.setText(message == null ? "" : message);
+        view.setTextColor(getColor(colorResource));
+        view.setVisibility(message == null ? View.GONE : View.VISIBLE);
     }
 
     private void renderAnchorAlarm(BridgeState state) {
@@ -1245,6 +1590,22 @@ public final class MainActivity extends Activity implements
         }
     }
 
+    private void openPlaySubscriptionManagement() {
+        Uri subscriptionUri = Uri.parse(
+                "https://play.google.com/store/account/subscriptions")
+                .buildUpon()
+                .appendQueryParameter("sku", StoreProductIdentifiers.REMOTE_ANCHOR_WATCH)
+                .appendQueryParameter("package", getPackageName())
+                .build();
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, subscriptionUri));
+        } catch (ActivityNotFoundException ignored) {
+            startActivity(new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/account/subscriptions")));
+        }
+    }
+
     private boolean isLocationRestrictedByPowerSaving() {
         PowerManager powerManager = getSystemService(PowerManager.class);
         if (powerManager == null || !powerManager.isPowerSaveMode()) return false;
@@ -1263,6 +1624,10 @@ public final class MainActivity extends Activity implements
     private boolean hasFineLocationPermission() {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isDebuggableBuild() {
+        return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 
     private String permissionDescription() {
@@ -1361,6 +1726,59 @@ public final class MainActivity extends Activity implements
         return warning;
     }
 
+    private void addPurchaseBenefit(
+            LinearLayout parent,
+            String title,
+            String detail
+    ) {
+        TextView titleView = text("✓  " + title, 14, R.color.nav_text);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.topMargin = dp(12);
+        parent.addView(titleView, titleParams);
+        TextView detailView = text(detail, 12, R.color.nav_secondary);
+        detailView.setLineSpacing(0.0f, 1.1f);
+        detailView.setPadding(dp(22), dp(2), 0, 0);
+        parent.addView(detailView, matchWrap());
+    }
+
+    private TextView addTierSummary(
+            LinearLayout parent,
+            String title,
+            String value,
+            String detail
+    ) {
+        LinearLayout row = horizontal();
+        row.setGravity(Gravity.TOP);
+        TextView titleView = text(title, 14, R.color.nav_text);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView valueView = text(value, 14, R.color.nav_text);
+        valueView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        valueView.setGravity(Gravity.END);
+        row.addView(titleView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(valueView, wrapWrap());
+        LinearLayout.LayoutParams rowParams = matchWrap();
+        rowParams.topMargin = dp(5);
+        parent.addView(row, rowParams);
+        TextView detailView = text(detail, 12, R.color.nav_secondary);
+        detailView.setLineSpacing(0.0f, 1.1f);
+        LinearLayout.LayoutParams detailParams = matchWrap();
+        detailParams.topMargin = dp(2);
+        parent.addView(detailView, detailParams);
+        return valueView;
+    }
+
+    private void addDivider(LinearLayout parent) {
+        View divider = new View(this);
+        divider.setBackgroundColor(getColor(R.color.nav_divider));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        params.topMargin = dp(12);
+        params.bottomMargin = dp(12);
+        parent.addView(divider, params);
+    }
+
     private void addCardHeader(LinearLayout card, String title) {
         TextView header = text(title, 17, R.color.nav_text);
         header.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -1414,10 +1832,10 @@ public final class MainActivity extends Activity implements
         background.setCornerRadius(dp(14));
         switcher.setBackground(background);
 
-        bridgeSectionButton = sectionButton("Bridge", SECTION_BRIDGE);
         anchorSectionButton = sectionButton("Anchor", SECTION_ANCHOR);
-        switcher.addView(bridgeSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        bridgeSectionButton = sectionButton("NMEA Stream", SECTION_BRIDGE);
         switcher.addView(anchorSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        switcher.addView(bridgeSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
         return switcher;
     }
 
@@ -1443,6 +1861,9 @@ public final class MainActivity extends Activity implements
         if (anchorDashboard != null) {
             anchorDashboard.setVisibility(section == SECTION_ANCHOR ? View.VISIBLE : View.GONE);
         }
+        if (pageTitle != null) {
+            pageTitle.setText(section == SECTION_ANCHOR ? "Anchor Watch" : "NMEA Stream");
+        }
         styleSectionButton(bridgeSectionButton, section == SECTION_BRIDGE);
         styleSectionButton(anchorSectionButton, section == SECTION_ANCHOR);
         if (scrollToTop && pageScrollView != null) {
@@ -1460,13 +1881,13 @@ public final class MainActivity extends Activity implements
     }
 
     private void updateSectionButtons(BridgeState state) {
-        bridgeSectionButton.setText(state.streaming ? "Bridge  •" : "Bridge");
+        bridgeSectionButton.setText(state.streaming ? "NMEA Stream  •" : "NMEA Stream");
         boolean anchorActive = state.anchorAlarmArmed
                 || state.anchorSetupActive
                 || anchorSetupRequested;
         anchorSectionButton.setText(anchorActive ? "Anchor  •" : "Anchor");
         bridgeSectionButton.setContentDescription(
-                state.streaming ? "Bridge, active" : "Bridge, inactive");
+                state.streaming ? "NMEA Stream, active" : "NMEA Stream, inactive");
         anchorSectionButton.setContentDescription(state.anchorAlarmArmed
                 ? "Anchor, armed" : anchorActive ? "Anchor, laying anchor" : "Anchor, disarmed");
     }
