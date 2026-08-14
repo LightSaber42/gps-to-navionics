@@ -31,6 +31,13 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var shoreMonitorSoundReady = false
     @Published private(set) var anchorPairingURL: URL?
     @Published private(set) var entitlementDecision = EntitlementDecision(featureLevel: .free)
+    @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var anchorReadinessPresented = false
+    @Published private(set) var anchorReadinessWasCompleted = false
+    @Published private(set) var readinessSirenConfirmed = false
+    @Published private(set) var readinessSafetyAcknowledged = false
+    @Published private(set) var readinessSirenPlaying = false
+    @Published private(set) var readinessSirenPlayedThisVisit = false
     @Published private var clock = Date()
 
     let port: UInt16 = 11_123
@@ -49,6 +56,10 @@ final class BridgeController: NSObject, ObservableObject,
         static let armed = "anchor.armed"
         static let sessionLeaseMigrationCompleted =
             "anchor.sessionEntitlementLeaseMigrationCompleted.v1"
+        static let readinessCompleted = "anchor.readiness.completed.v1"
+        static let readinessSirenConfirmed = "anchor.readiness.sirenConfirmed.v1"
+        static let readinessSafetyAcknowledged =
+            "anchor.readiness.safetyAcknowledged.v1"
     }
 
     private static let alarmCategoryIdentifier = "ANCHOR_ALARM"
@@ -87,6 +98,8 @@ final class BridgeController: NSObject, ObservableObject,
     private var anchorArmedAt: Date?
     private var breachStartedAt: Date?
     private var alarmAudioPlayer: AVAudioPlayer?
+    private var readinessSirenTask: Task<Void, Never>?
+    private var resumeArmingAfterReadiness = false
     private var pairingConfiguration: AnchorPairingConfiguration?
     private var sessionEntitlementLease: SessionEntitlementLease?
     private var breachEventIssued = false
@@ -96,6 +109,11 @@ final class BridgeController: NSObject, ObservableObject,
 
     override init() {
         authorizationStatus = locationManager.authorizationStatus
+        anchorReadinessWasCompleted = defaults.bool(forKey: DefaultsKey.readinessCompleted)
+        readinessSirenConfirmed = defaults.bool(forKey: DefaultsKey.readinessSirenConfirmed)
+        readinessSafetyAcknowledged = defaults.bool(
+            forKey: DefaultsKey.readinessSafetyAcknowledged
+        )
         let entitlementCache = EntitlementCacheStore().load()
         entitlementDecision = Self.effectiveEntitlementDecision(
             EntitlementPolicy.evaluate(
@@ -162,6 +180,13 @@ final class BridgeController: NSObject, ObservableObject,
         reconcileAnchorSyncServer()
         refreshNetworkAddresses()
         publishAnchorSyncState()
+        Task { @MainActor [weak self] in
+            await self?.refreshAnchorReadiness()
+        }
+    }
+
+    deinit {
+        readinessSirenTask?.cancel()
     }
 
     var canUseAnchorWatch: Bool {
@@ -263,6 +288,82 @@ final class BridgeController: NSObject, ObservableObject,
         case .authorizedAlways: return "Always"
         case .authorizedWhenInUse: return "While Using"
         @unknown default: return "Unknown"
+        }
+    }
+
+    var preciseLocationReady: Bool {
+        let locationAuthorized = authorizationStatus == .authorizedAlways
+            || authorizationStatus == .authorizedWhenInUse
+        return locationAuthorized && locationManager.accuracyAuthorization == .fullAccuracy
+    }
+
+    var backgroundLocationReady: Bool {
+        authorizationStatus == .authorizedAlways
+    }
+
+    var notificationsReady: Bool {
+        switch notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    var anchorReadinessRequirementsSatisfied: Bool {
+        preciseLocationReady
+            && backgroundLocationReady
+            && notificationsReady
+            && readinessSirenConfirmed
+            && readinessSafetyAcknowledged
+    }
+
+    var anchorReadinessComplete: Bool {
+        anchorReadinessWasCompleted && anchorReadinessRequirementsSatisfied
+    }
+
+    var anchorReadinessWillResumeArming: Bool {
+        resumeArmingAfterReadiness
+    }
+
+    var preciseLocationReadinessDescription: String {
+        if !preciseLocationReady {
+            return authorizationStatus == .denied || authorizationStatus == .restricted
+                ? "Enable Precise Location in Settings"
+                : "Precise Location is required"
+        }
+        return "Precise Location enabled"
+    }
+
+    var backgroundLocationReadinessDescription: String {
+        switch authorizationStatus {
+        case .authorizedAlways:
+            return "Always Allow enabled"
+        case .authorizedWhenInUse:
+            return "Change permission to Always Allow"
+        case .notDetermined:
+            return "Location permission not requested"
+        case .denied, .restricted:
+            return "Background location unavailable"
+        @unknown default:
+            return "Location permission unavailable"
+        }
+    }
+
+    var notificationReadinessDescription: String {
+        switch notificationAuthorizationStatus {
+        case .authorized:
+            return "Alerts and sound authorized"
+        case .provisional, .ephemeral:
+            return "Notifications authorized provisionally"
+        case .notDetermined:
+            return "Notification permission not requested"
+        case .denied:
+            return "Enable notifications and sound in Settings"
+        @unknown default:
+            return "Notification status unavailable"
         }
     }
 
@@ -402,10 +503,12 @@ final class BridgeController: NSObject, ObservableObject,
             anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
         } else if isLayingAnchor {
             guard anchorReferenceCoordinate != nil else { return }
+            guard ensureReadinessBeforeArming() else { return }
             prepareForAnchorAction(.arm)
         } else if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
             markAnchorPosition()
         } else {
+            guard ensureReadinessBeforeArming() else { return }
             prepareForAnchorAction(.arm)
         }
     }
@@ -437,6 +540,7 @@ final class BridgeController: NSObject, ObservableObject,
             }
             return
         }
+        guard ensureReadinessBeforeArming() else { return }
         anchorActionMessage = nil
         prepareForAnchorAction(.arm)
     }
@@ -527,6 +631,100 @@ final class BridgeController: NSObject, ObservableObject,
         UIApplication.shared.open(url)
     }
 
+    func showAnchorReadinessSettings() {
+        presentAnchorReadiness(resumeArming: false)
+    }
+
+    func dismissAnchorReadiness() {
+        stopReadinessTestSiren()
+        anchorReadinessPresented = false
+        resumeArmingAfterReadiness = false
+    }
+
+    func requestReadinessLocationAccess() {
+        switch authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            locationManager.requestAlwaysAuthorization()
+        case .authorizedAlways:
+            if locationManager.accuracyAuthorization != .fullAccuracy {
+                openSettings()
+            }
+        case .denied, .restricted:
+            openSettings()
+        @unknown default:
+            openSettings()
+        }
+    }
+
+    func requestReadinessNotificationAccess() {
+        if notificationAuthorizationStatus == .denied {
+            openSettings()
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await notificationCenter.requestAuthorization(
+                    options: [.alert, .sound, .badge]
+                )
+                await refreshAnchorReadiness()
+            } catch {
+                lastError = "Anchor alarm notifications could not be enabled: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func refreshAnchorReadiness() async {
+        let settings = await notificationCenter.notificationSettings()
+        notificationAuthorizationStatus = settings.authorizationStatus
+        invalidateAnchorReadinessIfNeeded()
+    }
+
+    func playReadinessTestSiren() {
+        guard !anchorAlarmArmed else { return }
+        readinessSirenTask?.cancel()
+        readinessSirenPlayedThisVisit = true
+        startAlarmAudio()
+        readinessSirenPlaying = alarmAudioPlayer != nil
+        guard readinessSirenPlaying else { return }
+        readinessSirenTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.stopReadinessTestSiren()
+        }
+    }
+
+    func confirmReadinessSirenHeard() {
+        guard readinessSirenPlayedThisVisit else { return }
+        stopReadinessTestSiren()
+        readinessSirenConfirmed = true
+        defaults.set(true, forKey: DefaultsKey.readinessSirenConfirmed)
+    }
+
+    func setReadinessSafetyAcknowledged(_ acknowledged: Bool) {
+        readinessSafetyAcknowledged = acknowledged
+        defaults.set(acknowledged, forKey: DefaultsKey.readinessSafetyAcknowledged)
+        if !acknowledged {
+            anchorReadinessWasCompleted = false
+            defaults.set(false, forKey: DefaultsKey.readinessCompleted)
+        }
+    }
+
+    func completeAnchorReadinessAndContinue() {
+        guard anchorReadinessRequirementsSatisfied else { return }
+        stopReadinessTestSiren()
+        anchorReadinessWasCompleted = true
+        defaults.set(true, forKey: DefaultsKey.readinessCompleted)
+        let shouldResumeArming = resumeArmingAfterReadiness
+        anchorReadinessPresented = false
+        resumeArmingAfterReadiness = false
+        if shouldResumeArming {
+            toggleAnchorAlarm()
+        }
+    }
+
     func refreshNetworkAddresses() {
         networkAddresses = NetworkAddressProvider.currentIPv4Addresses()
         updateAnchorPairingURL()
@@ -534,6 +732,7 @@ final class BridgeController: NSObject, ObservableObject,
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
+        invalidateAnchorReadinessIfNeeded()
 
         switch manager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
@@ -596,6 +795,38 @@ final class BridgeController: NSObject, ObservableObject,
                 self?.disarmAnchorAlarm()
             }
         }
+    }
+
+    private func ensureReadinessBeforeArming() -> Bool {
+        guard !anchorReadinessComplete else { return true }
+        presentAnchorReadiness(resumeArming: true)
+        return false
+    }
+
+    private func presentAnchorReadiness(resumeArming: Bool) {
+        stopReadinessTestSiren()
+        readinessSirenPlayedThisVisit = false
+        resumeArmingAfterReadiness = resumeArming
+        anchorReadinessPresented = true
+        Task { @MainActor [weak self] in
+            await self?.refreshAnchorReadiness()
+        }
+    }
+
+    private func invalidateAnchorReadinessIfNeeded() {
+        guard anchorReadinessWasCompleted,
+              !anchorReadinessRequirementsSatisfied else { return }
+        anchorReadinessWasCompleted = false
+        defaults.set(false, forKey: DefaultsKey.readinessCompleted)
+    }
+
+    private func stopReadinessTestSiren() {
+        readinessSirenTask?.cancel()
+        readinessSirenTask = nil
+        if !anchorAlarmTriggered {
+            stopAlarmAudio()
+        }
+        readinessSirenPlaying = false
     }
 
     private func prepareForAnchorAction(_ action: PendingAnchorAction) {
@@ -676,6 +907,14 @@ final class BridgeController: NSObject, ObservableObject,
             updateLocationMonitoring()
         case .arm:
             let wasLayingAnchor = isLayingAnchor
+            guard anchorReadinessComplete else {
+                pendingAnchorAction = nil
+                pendingAnchorActionStartedAt = nil
+                anchorActionMessage = "Complete the safety readiness check before arming."
+                presentAnchorReadiness(resumeArming: true)
+                updateLocationMonitoring()
+                return
+            }
             guard anchorMode == .shorelined || anchorReferenceCoordinate != nil else {
                 anchorActionMessage = "Record the anchor-drop position before arming free-swinging mode."
                 updateLocationMonitoring()

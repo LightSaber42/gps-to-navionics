@@ -51,6 +51,18 @@ struct ContentView: View {
                     rotatePairing: controller.rotateAnchorPairing
                 )
             }
+            .sheet(
+                isPresented: Binding(
+                    get: { controller.anchorReadinessPresented },
+                    set: { presented in
+                        if !presented {
+                            controller.dismissAnchorReadiness()
+                        }
+                    }
+                )
+            ) {
+                AnchorReadinessView(controller: controller)
+            }
             .alert("Disarm anchor watch?", isPresented: $showingDisarmConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Disarm", role: .destructive, action: controller.disarmAnchorAlarm)
@@ -73,6 +85,7 @@ struct ContentView: View {
                 guard phase == .active else { return }
                 Task {
                     await purchaseStore.refresh()
+                    await controller.refreshAnchorReadiness()
                 }
             }
             .onChange(of: controller.anchorAlarmTriggered) { _, triggered in
@@ -805,6 +818,18 @@ struct ContentView: View {
                 Text("After force-quitting or restarting this iPhone, reopen the app and re-arm the watch. Test alarm sound with your mute and Focus settings before relying on it.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Divider()
+                detailRow(
+                    "Safety readiness",
+                    controller.anchorReadinessComplete ? "Ready" : "Needs attention"
+                )
+                Button(
+                    controller.anchorReadinessComplete
+                        ? "Review readiness and test alarm"
+                        : "Complete safety readiness",
+                    action: controller.showAnchorReadinessSettings
+                )
+                .buttonStyle(.bordered)
             }
             .padding(.top, 8)
         } label: {
@@ -1246,6 +1271,206 @@ private struct AnchorDriftPlot: View {
             limitMeters,
             points.count
         )
+    }
+}
+
+private struct AnchorReadinessView: View {
+    @ObservedObject var controller: BridgeController
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Before the first watch", systemImage: "checkmark.shield")
+                            .font(.title2.bold())
+                        Text("Confirm the permissions and alarm sound this iPhone needs while it remains aboard. Permission changes are checked again before arming.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .cardStyle()
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        readinessRow(
+                            title: "Precise Location",
+                            detail: controller.preciseLocationReadinessDescription,
+                            ready: controller.preciseLocationReady,
+                            actionTitle: locationActionTitle,
+                            action: controller.requestReadinessLocationAccess
+                        )
+                        Divider()
+                        readinessRow(
+                            title: "Background Location",
+                            detail: controller.backgroundLocationReadinessDescription,
+                            ready: controller.backgroundLocationReady,
+                            actionTitle: locationActionTitle,
+                            action: controller.requestReadinessLocationAccess
+                        )
+                        Divider()
+                        readinessRow(
+                            title: "Notifications and sound",
+                            detail: controller.notificationReadinessDescription,
+                            ready: controller.notificationsReady,
+                            actionTitle: notificationActionTitle,
+                            action: controller.requestReadinessNotificationAccess
+                        )
+                    }
+                    .cardStyle()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .top, spacing: 12) {
+                            readinessSymbol(ready: controller.readinessSirenConfirmed)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Alarm sound test")
+                                    .font(.headline)
+                                Text(
+                                    controller.readinessSirenConfirmed
+                                        ? "Siren confirmed on this iPhone"
+                                        : "Play the two-second siren, then confirm that you heard it"
+                                )
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Button {
+                            controller.playReadinessTestSiren()
+                        } label: {
+                            Label(
+                                controller.readinessSirenPlaying
+                                    ? "Siren playing…"
+                                    : controller.readinessSirenConfirmed
+                                        ? "Test siren again"
+                                        : "Play two-second siren",
+                                systemImage: "speaker.wave.3.fill"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(controller.readinessSirenPlaying)
+
+                        if controller.readinessSirenPlayedThisVisit
+                            && !controller.readinessSirenConfirmed {
+                            Button(
+                                "I heard the siren",
+                                action: controller.confirmReadinessSirenHeard
+                            )
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        Text("A notification cannot guarantee sound while the iPhone is muted or in Focus. Test the phone in the conditions you will use aboard.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .cardStyle()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(
+                            isOn: Binding(
+                                get: { controller.readinessSafetyAcknowledged },
+                                set: controller.setReadinessSafetyAcknowledged
+                            )
+                        ) {
+                            Text("I understand Anchor Watch is an auxiliary aid. It does not replace a responsible anchor watch or independent navigation and safety equipment.")
+                                .font(.subheadline)
+                        }
+
+                        Text("iOS cannot relaunch this app after a force-quit or restart. Reopen the app and re-arm Anchor Watch before leaving the phone aboard.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .cardStyle()
+
+                    Button {
+                        controller.completeAnchorReadinessAndContinue()
+                    } label: {
+                        Text(
+                            controller.anchorReadinessWillResumeArming
+                                ? "Continue and arm"
+                                : "Save readiness"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!controller.anchorReadinessRequirementsSatisfied)
+                }
+                .frame(maxWidth: 620)
+                .frame(maxWidth: .infinity)
+                .padding()
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Safety Readiness")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", action: controller.dismissAnchorReadiness)
+                }
+            }
+            .task {
+                await controller.refreshAnchorReadiness()
+            }
+        }
+    }
+
+    private var locationActionTitle: String {
+        switch controller.authorizationStatus {
+        case .notDetermined:
+            return "Allow Location"
+        case .authorizedWhenInUse:
+            return "Allow in Background"
+        case .authorizedAlways:
+            return controller.preciseLocationReady ? "Enabled" : "Open Settings"
+        case .denied, .restricted:
+            return "Open Settings"
+        @unknown default:
+            return "Open Settings"
+        }
+    }
+
+    private var notificationActionTitle: String {
+        switch controller.notificationAuthorizationStatus {
+        case .notDetermined:
+            return "Allow Notifications"
+        case .authorized, .provisional, .ephemeral:
+            return "Enabled"
+        case .denied:
+            return "Open Settings"
+        @unknown default:
+            return "Open Settings"
+        }
+    }
+
+    private func readinessRow(
+        title: String,
+        detail: String,
+        ready: Bool,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            readinessSymbol(ready: ready)
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if !ready {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.bordered)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func readinessSymbol(ready: Bool) -> some View {
+        Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+            .font(.title2)
+            .foregroundStyle(ready ? Color.green : Color.orange)
+            .accessibilityLabel(ready ? "Ready" : "Action required")
     }
 }
 
