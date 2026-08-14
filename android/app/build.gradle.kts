@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.jaco.navionicsgpsbridge"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 5
         versionName = "2.0.0"
     }

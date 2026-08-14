@@ -151,7 +151,7 @@ This document is the implementation and submission checklist for repositioning t
 ## 10. Store metadata, privacy, and legal artifacts
 
 - [x] Set both platforms to version 2.0.0 and increment build/version codes.
-- [ ] Add an Apple privacy manifest if required by the final API/dependency audit.
+- [x] Add an Apple privacy manifest if required by the final API/dependency audit.
 - [ ] Draft App Store privacy-label answers.
 - [ ] Draft Google Play Data Safety answers.
 - [ ] Draft App Store and Play Store titles, short/promotional text, long descriptions, keywords/tags, release notes, and reviewer notes.

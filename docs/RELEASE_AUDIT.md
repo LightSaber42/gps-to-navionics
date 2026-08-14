@@ -4,9 +4,9 @@ Audited on 2026-08-13 against the current source tree and the linked primary App
 
 ## Release blockers and required remediation
 
-1. Add `PrivacyInfo.xcprivacy` to the iOS app target. The app uses app-local `UserDefaults`, so declare `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1`. No other required-reason API category was found in the app sources.
-2. Raise Android `targetSdk` and the manual APK link target from 35 to 36 before submission. Google Play requires Android 16 / API 36 for new phone apps and updates beginning 2026-08-31. The project already compiles against API 36.
-3. Change `ShoreMonitorBootReceiver` to `android:exported="false"`. It only consumes a system boot broadcast and does not need to accept explicit broadcasts from other apps.
+1. Resolved: `PrivacyInfo.xcprivacy` is included in the iOS app target and declares app-local `UserDefaults` use as `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1`. No other required-reason API category was found in the app sources.
+2. Resolved: Android now compiles and targets API 36, meeting the Google Play Android 16 targeting requirement taking effect on 2026-08-31.
+3. Resolved: `ShoreMonitorBootReceiver` is `android:exported="false"`; it only consumes the protected system boot broadcast.
 4. The app now uses the Anchor Watch launcher name and generic NMEA-oriented permission copy. Navionics appears only as a compatibility example with a clear non-affiliation notice; the explanations of precise location, background use, local networking, and alarms remain explicit.
 5. Complete Play Console declarations for both `location` and `connectedDevice` foreground-service types, including demonstration videos and the impact of interruption. Long-running user-started anchor monitoring is treated as background-location use by Play policy even though the app intentionally does not request `ACCESS_BACKGROUND_LOCATION`.
 6. Make the recurring value of Remote Anchor Watch explicit in App Review notes and subscription copy. Apple permits subscriptions in all categories but requires ongoing customer value.
@@ -63,7 +63,7 @@ Current state:
 - Fine and coarse location are requested together at runtime. Precise GPS is central to the boat feature. The app intentionally uses a user-started location foreground service rather than requesting `ACCESS_BACKGROUND_LOCATION`; Play can still subject this behavior to background-location review.
 - `android:allowBackup="false"` keeps preferences, history, cached commercial state, and encrypted pairing material out of Android backup. Pairing secrets are ciphertext under an Android Keystore key.
 - Services and `AnchorPairingActivity` are non-exported. `MainActivity` must be exported for the launcher and `ShoreMonitorActivity` must be exported for its pairing deep link. The deep-link parser validates scheme, host, version, port, and key length before storage.
-- `ShoreMonitorBootReceiver` is unnecessarily exported and should be hardened as noted above. Its `connectedDevice` foreground service remains an allowed boot-restoration type under the current platform restrictions.
+- `ShoreMonitorBootReceiver` is non-exported. Its `connectedDevice` foreground service remains an allowed boot-restoration type under the current platform restrictions.
 - Android 16/API 36 targeting must be tested on a physical Android 16 device after the target bump, especially foreground-service start, notification, location, and boot restoration.
 
 Primary references: [foreground-service types](https://developer.android.com/develop/background-work/services/fgs/service-types), [background start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start), [Play foreground-service declarations](https://support.google.com/googleplay/android-developer/answer/13392821), and [Play background-location review](https://support.google.com/googleplay/android-developer/answer/9799150).

@@ -30,6 +30,7 @@
 		D10000000000000000000002 /* EntitlementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* EntitlementPolicy.swift */; };
 		D10000000000000000000003 /* PurchaseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* PurchaseStore.swift */; };
 		E10000000000000000000001 /* DisplayUnits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DisplayUnits.swift */; };
+		F10000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 		D20000000000000000000003 /* PurchaseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseStore.swift; sourceTree = "<group>"; };
 		D20000000000000000000004 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
 		E20000000000000000000001 /* DisplayUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayUnits.swift; sourceTree = "<group>"; };
+		F20000000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -107,6 +109,7 @@
 				B50000000000000000000005 /* Network */,
 				D20000000000000000000004 /* Products.storekit */,
 				B20000000000000000000008 /* Info.plist */,
+				F20000000000000000000001 /* PrivacyInfo.xcprivacy */,
 			);
 			path = NavionicsGPSBridge;
 			sourceTree = "<group>";
@@ -252,6 +255,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F10000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
