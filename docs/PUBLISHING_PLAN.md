@@ -43,7 +43,7 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Preserve and integrate the in-progress degraded-GPS-precision warning currently present in the worktree.
 - [x] Add deterministic tests for entitlement evaluation, offline cache, expiry/revocation, and active-session continuity.
 - [x] Add deterministic tests for metres/feet conversions and formatting.
-- [ ] Add purchase/restore/expiry physical-device test cases to the release checklist.
+- [x] Add purchase/restore/expiry physical-device test cases to the release checklist.
 
 ## 1. Release and dependency audit
 
@@ -138,7 +138,7 @@ This document is the implementation and submission checklist for repositioning t
 
 ## 9. Naming, localization, and visual identity
 
-- [ ] Change store/display naming to Anchor Watch & GPS Bridge / Anchor Watch.
+- [x] Change store/display naming to Anchor Watch & GPS Bridge / Anchor Watch.
 - [x] Change visible `Bridge` terminology to `NMEA Stream` where it refers to the free feature.
 - [x] Remove Navionics from the product title and add a concise unaffiliated compatibility disclaimer where referenced.
 - [ ] Move iOS user-facing copy into a String Catalog or `Localizable.strings` structure.
@@ -152,15 +152,15 @@ This document is the implementation and submission checklist for repositioning t
 
 - [x] Set both platforms to version 2.0.0 and increment build/version codes.
 - [x] Add an Apple privacy manifest if required by the final API/dependency audit.
-- [ ] Draft App Store privacy-label answers.
-- [ ] Draft Google Play Data Safety answers.
-- [ ] Draft App Store and Play Store titles, short/promotional text, long descriptions, keywords/tags, release notes, and reviewer notes.
-- [ ] Draft privacy policy covering local GPS/history, direct paired transport, store billing, diagnostics, and deletion behavior.
-- [ ] Draft support documentation for permissions, alarm testing, battery/power settings, force-quit/reboot limits, purchase restoration, subscription management, Tailscale, and Android-only shore monitoring.
-- [ ] Draft terms/subscription terms and auxiliary-safety disclaimer.
+- [x] Draft App Store privacy-label answers.
+- [x] Draft Google Play Data Safety answers.
+- [x] Draft App Store and Play Store titles, short/promotional text, long descriptions, keywords/tags, release notes, and reviewer notes.
+- [x] Draft privacy policy covering local GPS/history, direct paired transport, store billing, diagnostics, and deletion behavior.
+- [x] Draft support documentation for permissions, alarm testing, battery/power settings, force-quit/reboot limits, purchase restoration, subscription management, Tailscale, and Android-only shore monitoring.
+- [x] Draft terms/subscription terms and auxiliary-safety disclaimer.
 - [ ] Add in-app links using placeholder configuration until the public domain is known.
 - [ ] Replace every placeholder with live HTTPS URLs before submission.
-- [ ] Add a non-affiliation statement for Navionics/Garmin compatibility references.
+- [x] Add a non-affiliation statement for Navionics/Garmin compatibility references.
 
 ## 11. Release engineering
 
@@ -171,8 +171,8 @@ This document is the implementation and submission checklist for repositioning t
 - [ ] Enable Play App Signing and create/protect a separate upload key outside source control.
 - [ ] Configure release minification/resource shrinking only after protocol/crypto reflection behavior is verified.
 - [ ] Produce an Android App Bundle and verify signing, version code, manifest, and 16 KB page compatibility.
-- [ ] Create TestFlight and Play internal/closed-test release instructions.
-- [ ] Define staged production rollout and rollback/stop criteria.
+- [x] Create TestFlight and Play internal/closed-test release instructions.
+- [x] Define staged production rollout and rollback/stop criteria.
 
 ## 12. Verification matrix
 

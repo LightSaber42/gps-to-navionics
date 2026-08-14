@@ -72,23 +72,25 @@ Primary references: [foreground-service types](https://developer.android.com/dev
 
 ### Apple
 
-Add an app privacy manifest with:
+The bundled app privacy manifest declares:
 
 - tracking disabled and no tracking domains;
 - no collected-data entries under the current no-backend/no-analytics design;
 - `NSPrivacyAccessedAPICategoryUserDefaults` / `CA92.1` for app-only preferences.
 
-The provisional App Store privacy-label answer is **No, we do not collect data from this app**. GPS, history, settings, alarm events, and pairing secrets are processed locally. Direct user-configured transport is not accessible to the developer or an embedded third-party partner, and Apple does not require disclosure for payment information the developer never accesses. Re-audit the final StoreKit implementation and every final dependency before submission.
+The drafted App Store privacy-label answer is **No, we do not collect data from this app**. GPS, history, settings, alarm events, and pairing secrets are processed locally. Direct user-configured transport is not accessible to the developer or an embedded third-party partner, and Apple does not require disclosure for payment information the developer never accesses. Re-audit every dependency in the final archived binary before submission; the complete draft is in `docs/PRIVACY_POLICY.md`.
 
 ### Google Play
 
-The provisional Data Safety answers are deliberately more conservative because Play defines collection as transmitting data off-device:
+The drafted Data Safety answers are deliberately more conservative because Play defines collection as transmitting data off-device:
 
 - Declare precise location as optional collection for app functionality because the user can start plaintext NMEA TCP/UDP streaming to a chosen receiver. Treat the transfer as not shared under the specific user-initiated-action exception.
 - The encrypted anchor-sync channel is end-to-end between paired phones, has no intermediary/relay, and falls under Play's end-to-end-encryption collection exception.
-- Reassess Purchase history after the Billing adapter is final. If the app retains or transmits product/purchase status beyond Play's direct payment processing, declare it as optional collection for app functionality.
+- Do not declare Purchase history as developer collection under the current client-only adapter: it keeps minimum entitlement state locally and does not upload a purchase token or status to a developer system. Reassess if a backend or purchase-token upload is added.
 - Do not claim that all collected data is encrypted in transit while plaintext NMEA streaming exists.
 - Declare no analytics, ads, crash reporting, account data, developer server collection, or sale of data.
-- Keep `allowBackup="false"`; users delete local data by clearing app storage or uninstalling, with explicit in-app clearing controls added where the final UX calls for them.
+- Keep `allowBackup="false"`; users delete ordinary local data by clearing app storage or uninstalling, and remove/invalidate pairing through the existing unpair/replace controls.
+
+The complete store-form draft and deletion caveats are in `docs/PRIVACY_POLICY.md`.
 
 Primary references: [Apple privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files), [Apple required-reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api), [App Store privacy details](https://developer.apple.com/app-store/app-privacy-details/), and [Google Play Data Safety](https://support.google.com/googleplay/android-developer/answer/10787469).
