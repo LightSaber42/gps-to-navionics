@@ -67,6 +67,7 @@
 		D20000000000000000000001 /* EntitlementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicyTests.swift; sourceTree = "<group>"; };
 		D20000000000000000000002 /* EntitlementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicy.swift; sourceTree = "<group>"; };
 		D20000000000000000000003 /* PurchaseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseStore.swift; sourceTree = "<group>"; };
+		D20000000000000000000004 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,6 +103,7 @@
 				B50000000000000000000003 /* App */,
 				B50000000000000000000004 /* NMEA */,
 				B50000000000000000000005 /* Network */,
+				D20000000000000000000004 /* Products.storekit */,
 				B20000000000000000000008 /* Info.plist */,
 			);
 			path = NavionicsGPSBridge;

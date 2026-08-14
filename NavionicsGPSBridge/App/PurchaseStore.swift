@@ -83,6 +83,14 @@ final class PurchaseStore: ObservableObject {
     }
 
     func purchase(productID: String) async {
+        if [
+            StoreProductIdentifiers.remoteMonthly,
+            StoreProductIdentifiers.remoteAnnual
+        ].contains(productID),
+           entitlementDecision.featureLevel.rawValue < FeatureLevel.anchorWatch.rawValue {
+            actionState = .failed("Unlock Anchor Watch before subscribing to Remote Anchor Watch.")
+            return
+        }
         guard let product = products[productID] else {
             actionState = .failed("This purchase is not available from the App Store right now.")
             return
@@ -98,6 +106,7 @@ final class PurchaseStore: ObservableObject {
                 }
                 await transaction.finish()
                 await refreshEntitlements(storeAvailable: true)
+                await refreshRemoteSubscriptionState()
                 actionState = .idle
             case .pending:
                 actionState = .pending
@@ -116,6 +125,7 @@ final class PurchaseStore: ObservableObject {
         do {
             try await AppStore.sync()
             await refreshEntitlements(storeAvailable: true)
+            await refreshRemoteSubscriptionState()
             actionState = .idle
         } catch {
             actionState = .failed(error.localizedDescription)
@@ -266,6 +276,7 @@ final class PurchaseStore: ObservableObject {
             }
             await transaction.finish()
             await refreshEntitlements(storeAvailable: true)
+            await refreshRemoteSubscriptionState()
         }
     }
 

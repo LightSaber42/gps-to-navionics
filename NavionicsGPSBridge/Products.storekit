@@ -1,0 +1,78 @@
+{
+  "identifier" : "A794C5B0-A742-48E9-BBC3-3702508434C0",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "27C9D823-BB78-4E4A-92AB-65EC51BAFF9F",
+      "localizations" : [
+        {
+          "description" : "Lifetime access to local anchor monitoring, alarms, and history.",
+          "displayName" : "Anchor Watch",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.jaco.navionicsgpsbridge.anchorwatch.lifetime",
+      "referenceName" : "Anchor Watch Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "1FD7E9BB-6D40-424D-BD16-08F2A1DD81E4",
+      "localizations" : [],
+      "name" : "Remote Anchor Watch",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "C758E622-053B-459C-983B-3F2C38D151DC",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Remote anchor status and alarms on a paired Android shore phone.",
+              "displayName" : "Remote Anchor Watch Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jaco.navionicsgpsbridge.remote.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Remote Anchor Watch Monthly",
+          "subscriptionGroupID" : "1FD7E9BB-6D40-424D-BD16-08F2A1DD81E4",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7C1BBF30-7F87-4DD4-B64D-9D0CEE74683D",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Remote anchor status and alarms on a paired Android shore phone.",
+              "displayName" : "Remote Anchor Watch Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jaco.navionicsgpsbridge.remote.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Remote Anchor Watch Annual",
+          "subscriptionGroupID" : "1FD7E9BB-6D40-424D-BD16-08F2A1DD81E4",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

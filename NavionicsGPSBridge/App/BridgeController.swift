@@ -64,10 +64,11 @@ final class BridgeController: NSObject, ObservableObject,
         _ decision: EntitlementDecision
     ) -> EntitlementDecision {
 #if DEBUG
-        EntitlementDecision(featureLevel: .remoteAnchorWatch)
-#else
-        decision
+        if !ProcessInfo.processInfo.arguments.contains("-UseStoreEntitlements") {
+            return EntitlementDecision(featureLevel: .remoteAnchorWatch)
+        }
 #endif
+        return decision
     }
 
     private let locationManager = CLLocationManager()

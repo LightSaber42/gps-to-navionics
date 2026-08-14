@@ -2,8 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     private enum DashboardSection: String, CaseIterable, Identifiable {
-        case bridge = "Bridge"
         case anchor = "Anchor"
+        case bridge = "NMEA Stream"
 
         var id: String { rawValue }
     }
@@ -11,18 +11,22 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var controller = BridgeController()
     @StateObject private var purchaseStore = PurchaseStore()
-    @State private var selectedSection = DashboardSection.bridge
+    @State private var selectedSection = DashboardSection.anchor
     @State private var showingAnchorPairing = false
     @State private var showingDisarmConfirmation = false
     @State private var showingBridgeSetup = false
     @State private var showingBridgeDetails = false
     @State private var showingAnchorDetails = false
+    @State private var remoteCompanionConfirmed = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     sectionSwitcher
+#if DEBUG
+                    debugEntitlementBanner
+#endif
 
                     if selectedSection == .bridge {
                         bridgeDashboard
@@ -34,7 +38,9 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .padding()
             }
-            .navigationTitle("GPS Bridge")
+            .navigationTitle(
+                selectedSection == .anchor ? "Anchor Watch" : "NMEA Stream"
+            )
             .background(Color(uiColor: .systemGroupedBackground))
             .sheet(isPresented: $showingAnchorPairing) {
                 AnchorPairingView(
@@ -79,17 +85,35 @@ struct ContentView: View {
 
     private var sectionSwitcher: some View {
         HStack(spacing: 6) {
-            sectionButton(.bridge, active: controller.isStreaming)
             sectionButton(
                 .anchor,
                 active: controller.anchorAlarmArmed || controller.isLayingAnchor
             )
+            sectionButton(.bridge, active: controller.isStreaming)
         }
         .padding(4)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .contain)
     }
+
+#if DEBUG
+    private var debugEntitlementBanner: some View {
+        Label(
+            ProcessInfo.processInfo.arguments.contains("-UseStoreEntitlements")
+                ? "StoreKit test mode · Features follow local test purchases"
+                : "Debug build · Anchor Watch and Remote features unlocked",
+            systemImage: "hammer.fill"
+        )
+        .font(.footnote.bold())
+        .foregroundStyle(.orange)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .accessibilityLabel(
+            "Debug build. Anchor Watch and Remote Anchor Watch features are unlocked."
+        )
+    }
+#endif
 
     private func sectionButton(
         _ section: DashboardSection,
@@ -274,16 +298,108 @@ struct ContentView: View {
 
     private var anchorDashboard: some View {
         VStack(spacing: 16) {
-            if controller.anchorAlarmArmed || controller.isLayingAnchor {
-                armedAnchorDashboard
+            if controller.canUseAnchorWatch {
+                if controller.anchorAlarmArmed || controller.isLayingAnchor {
+                    armedAnchorDashboard
+                } else {
+                    anchorSetupCard
+                }
+                anchorDetailsCard
+                shoreMonitorCard
+                if controller.anchorAlarmArmed {
+                    safetyNote
+                }
             } else {
-                anchorSetupCard
+                anchorWatchIntroduction
             }
-            anchorDetailsCard
-            shoreMonitorCard
-            if controller.anchorAlarmArmed {
-                safetyNote
+        }
+    }
+
+    private var anchorWatchIntroduction: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                Image(systemName: "anchor.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
+                Text("Anchor Watch")
+                    .font(.largeTitle.bold())
+                Text("Turn the boat phone into a local drift and GPS-loss alarm. Choose a shore-tied position or a free-swinging anchor circle, then keep the phone aboard and powered.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                purchaseBenefit(
+                    "Two anchoring modes",
+                    detail: "Shorelined watches the tied boat position; Free swinging follows a marked anchor-drop point.",
+                    symbol: "point.topleft.down.to.point.bottomright.curvepath"
+                )
+                purchaseBenefit(
+                    "Durable watch history",
+                    detail: "See the current trail, alarm boundary, GPS accuracy, and durable alarm events.",
+                    symbol: "chart.xyaxis.line"
+                )
+                purchaseBenefit(
+                    "Local safety alarms",
+                    detail: "Drift confirms for 5 seconds and GPS loss alarms after 30 seconds while the watch remains armed.",
+                    symbol: "bell.and.waves.left.and.right.fill"
+                )
             }
+            .cardStyle()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose your level")
+                    .font(.headline)
+                tierRow("NMEA Stream", value: "Free", detail: "GPS-to-NMEA streaming stays free.")
+                Divider()
+                tierRow(
+                    "Anchor Watch",
+                    value: purchaseStore.anchorWatchPrice ?? "Price loading…",
+                    detail: "One-time purchase on this Apple account."
+                )
+                Divider()
+                tierRow(
+                    "Remote Anchor Watch",
+                    value: "Optional add-on",
+                    detail: "Requires Anchor Watch, a separate Android shore phone, and a monthly or annual subscription."
+                )
+            }
+            .cardStyle()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Unlock Anchor Watch")
+                    .font(.headline)
+                Text("This is a one-time, platform-specific purchase. It restores only with the same Apple account and does not transfer to Google Play.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button {
+                    Task {
+                        await purchaseStore.purchase(
+                            productID: StoreProductIdentifiers.anchorWatchLifetime
+                        )
+                    }
+                } label: {
+                    Label(
+                        anchorPurchaseButtonTitle,
+                        systemImage: "lock.open.fill"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(purchaseActionInProgress || purchaseStore.anchorWatchPrice == nil)
+
+                purchaseStatusView
+
+                Button("Restore Purchases") {
+                    Task { await purchaseStore.restorePurchases() }
+                }
+                .disabled(purchaseActionInProgress)
+
+                Text("Anchor Watch is an auxiliary aid, not a certified navigation or safety system. Test alarms before relying on it and keep an independent anchor watch and navigation backup.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .cardStyle()
         }
     }
 
@@ -563,22 +679,112 @@ struct ContentView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Text("Add an Android phone for backup remote and connection-loss alerts. Remote use requires Tailscale or another VPN on both phones.")
+            Text("Add a separate Android phone for read-only remote status, durable alarm replay, and connection-loss alerts.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button {
-                controller.refreshAnchorPairing()
-                showingAnchorPairing = true
-            } label: {
-                Label(
-                    controller.shoreMonitorConnected ? "View pairing code" : "Set up shore monitor",
-                    systemImage: "qrcode"
+            if controller.canUseRemoteAnchorWatch {
+                Button {
+                    controller.refreshAnchorPairing()
+                    showingAnchorPairing = true
+                } label: {
+                    Label(
+                        controller.shoreMonitorConnected
+                            ? "View pairing code"
+                            : "Set up shore monitor",
+                        systemImage: "qrcode"
+                    )
+                }
+                .font(.subheadline)
+
+                Link(
+                    "Manage Subscription",
+                    destination: URL(string: "https://apps.apple.com/account/subscriptions")!
+                )
+                .font(.subheadline)
+                remoteSubscriptionStatusView
+            } else if purchaseStore.entitlementDecision.featureLevel.rawValue
+                        >= FeatureLevel.anchorWatch.rawValue {
+                remoteAnchorWatchOffer
+            } else {
+                Text("Remote upgrades require currently validated Anchor Watch ownership. Your active local watch remains protected until it is disarmed.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .cardStyle()
+    }
+
+    private var remoteAnchorWatchOffer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Text("Add Remote Anchor Watch")
+                .font(.headline)
+            Text("Requires a separate Android phone; iPhone and iPad cannot act as the shore monitor.")
+                .font(.subheadline.bold())
+            Text("Both phones must be reachable on the same LAN or through your own Tailscale/equivalent VPN. The app provides no developer-operated internet relay.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Toggle(
+                "I have a separate Android phone for shore monitoring",
+                isOn: $remoteCompanionConfirmed
+            )
+            .font(.subheadline)
+
+            remoteProductButton(
+                title: "Monthly",
+                price: purchaseStore.remoteMonthlyPrice,
+                productID: StoreProductIdentifiers.remoteMonthly,
+                highlighted: false
+            )
+            remoteProductButton(
+                title: "Annual · Best value",
+                price: purchaseStore.remoteAnnualPrice,
+                productID: StoreProductIdentifiers.remoteAnnual,
+                highlighted: true
+            )
+
+            purchaseStatusView
+
+            Text("Subscriptions auto-renew for the displayed billing period unless cancelled at least 24 hours before renewal. Manage or cancel in App Store subscriptions. Access is platform-specific and does not transfer to Google Play.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Restore Purchases") {
+                    Task { await purchaseStore.restorePurchases() }
+                }
+                .disabled(purchaseActionInProgress)
+                Spacer()
+                Link(
+                    "Manage Subscription",
+                    destination: URL(string: "https://apps.apple.com/account/subscriptions")!
                 )
             }
             .font(.subheadline)
         }
-        .cardStyle()
+    }
+
+    private func remoteProductButton(
+        title: String,
+        price: String?,
+        productID: String,
+        highlighted: Bool
+    ) -> some View {
+        Button {
+            Task { await purchaseStore.purchase(productID: productID) }
+        } label: {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(price ?? "Price loading…")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity, minHeight: 42)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(highlighted ? .blue : .secondary)
+        .disabled(!remoteCompanionConfirmed || price == nil || purchaseActionInProgress)
     }
 
     private var anchorDetailsCard: some View {
@@ -618,6 +824,119 @@ struct ContentView: View {
         .font(.footnote)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 4)
+    }
+
+    private func purchaseBenefit(
+        _ title: String,
+        detail: String,
+        symbol: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(.blue)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.bold())
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func tierRow(_ title: String, value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.subheadline.bold())
+                Spacer()
+                Text(value)
+                    .font(.subheadline.bold())
+                    .multilineTextAlignment(.trailing)
+            }
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var purchaseStatusView: some View {
+        switch purchaseStore.actionState {
+        case .idle:
+            EmptyView()
+        case .loadingProducts:
+            Label("Loading App Store products…", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+        case .purchasing:
+            Label("Waiting for the App Store…", systemImage: "cart.fill")
+                .foregroundStyle(.secondary)
+        case .pending:
+            Label(
+                "Purchase pending. Access unlocks only after the App Store confirms payment.",
+                systemImage: "clock.fill"
+            )
+            .foregroundStyle(.orange)
+        case .cancelled:
+            Label("Purchase cancelled. Nothing was charged.", systemImage: "xmark.circle")
+                .foregroundStyle(.secondary)
+        case .restoring:
+            Label("Restoring purchases…", systemImage: "arrow.clockwise")
+                .foregroundStyle(.secondary)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
+    @ViewBuilder
+    private var remoteSubscriptionStatusView: some View {
+        switch purchaseStore.remoteSubscriptionState {
+        case .unavailable, .notSubscribed:
+            EmptyView()
+        case .subscribed:
+            Label("Remote subscription active", systemImage: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+        case .inGracePeriod:
+            Label(
+                "Subscription is in a billing grace period. Update payment details in the App Store.",
+                systemImage: "exclamationmark.circle.fill"
+            )
+            .foregroundStyle(.orange)
+        case .inBillingRetry:
+            Label(
+                "The App Store is retrying billing. Manage the subscription to avoid losing new-session access.",
+                systemImage: "arrow.clockwise.circle.fill"
+            )
+            .foregroundStyle(.orange)
+        case .expired:
+            Label("Remote subscription expired.", systemImage: "calendar.badge.exclamationmark")
+                .foregroundStyle(.orange)
+        case .revoked:
+            Label("Remote subscription was revoked or refunded.", systemImage: "xmark.seal.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
+    private var purchaseActionInProgress: Bool {
+        switch purchaseStore.actionState {
+        case .loadingProducts, .purchasing, .restoring:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var anchorPurchaseButtonTitle: String {
+        guard let price = purchaseStore.anchorWatchPrice else {
+            return "Loading App Store price…"
+        }
+        return "Unlock Anchor Watch · \(price)"
     }
 
     private func statusHeader(_ title: String, color: Color) -> some View {
