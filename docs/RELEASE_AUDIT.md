@@ -45,7 +45,7 @@ Primary references: [Play Billing integration](https://developer.android.com/goo
 Current state:
 
 - `UIBackgroundModes` contains `location` and `audio`. Location updates are enabled only for an active NMEA stream or armed watch. The playback session starts only for an active alarm. These are direct uses of the declared modes and align with App Review Guideline 2.5.4.
-- The app requests When In Use location in context and upgrades to Always after arming. The Always purpose string explains screen-locked monitoring. The first-arm readiness work must make this sequencing and the consequences of denial explicit.
+- The first-arm readiness flow requests When In Use location in context, then upgrades to Always before arming. It blocks a new watch until Precise Location and Always Allow are active, while leaving an already-armed watch uninterrupted. The Always purpose string explains screen-locked monitoring.
 - The local-network purpose covers direct NMEA clients and the paired shore monitor. There is no Bonjour browsing declaration because the app uses direct raw TCP/UDP endpoints.
 - Notification authorization requests alert, sound, and badge. Alarm notifications are time-sensitive, matching the existing entitlement; the app does not request or claim Critical Alerts.
 - The app correctly tells users it cannot relaunch itself after force-quit or reboot. That limitation must remain in review notes and support copy.
@@ -59,7 +59,7 @@ Current state:
 
 - `BridgeService` correctly declares `location` plus `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_LOCATION`. It starts from a visible user action, owns the boat GPS/wake lock, and stops those resources when streaming/setup/arming no longer needs them.
 - `ShoreMonitorService` correctly declares `connectedDevice` plus `FOREGROUND_SERVICE_CONNECTED_DEVICE`. The manifest's `CHANGE_NETWORK_STATE` satisfies a connected-device runtime prerequisite. The shore service itself has no GPS request or wake lock.
-- `POST_NOTIFICATIONS`, `ACCESS_NOTIFICATION_POLICY`, `RECEIVE_BOOT_COMPLETED`, and `VIBRATE` match implemented alarm/readiness/restore behavior. There is no full-screen-intent or exact-alarm permission.
+- `POST_NOTIFICATIONS`, `ACCESS_NOTIFICATION_POLICY`, `RECEIVE_BOOT_COMPLETED`, and `VIBRATE` match implemented alarm/readiness/restore behavior. Boat-mode readiness verifies notification and Do Not Disturb access, syncs DND bypass onto the alarm channel, and requires a confirmed audible test. There is no full-screen-intent or exact-alarm permission.
 - Fine and coarse location are requested together at runtime. Precise GPS is central to the boat feature. The app intentionally uses a user-started location foreground service rather than requesting `ACCESS_BACKGROUND_LOCATION`; Play can still subject this behavior to background-location review.
 - `android:allowBackup="false"` keeps preferences, history, cached commercial state, and encrypted pairing material out of Android backup. Pairing secrets are ciphertext under an Android Keystore key.
 - Services and `AnchorPairingActivity` are non-exported. `MainActivity` must be exported for the launcher and `ShoreMonitorActivity` must be exported for its pairing deep link. The deep-link parser validates scheme, host, version, port, and key length before storage.

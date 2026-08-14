@@ -117,14 +117,14 @@ This document is the implementation and submission checklist for repositioning t
 
 ## 7. Readiness onboarding and settings
 
-- [ ] Implement a first-arm readiness flow on iOS.
-- [ ] Implement a first-arm readiness flow on Android boat mode.
-- [ ] Verify precise location, required background capability, and notifications.
-- [ ] Explain/check Android power-saving risk and provide the correct settings deep link.
-- [ ] Play a short test siren and require user confirmation that it was heard.
-- [ ] Record the auxiliary-aid acknowledgement locally.
-- [ ] Persist readiness completion locally and invalidate it if a required permission becomes unavailable.
-- [ ] Add `Test alarm again` and readiness status to settings without cluttering the live dashboard.
+- [x] Implement a first-arm readiness flow on iOS.
+- [x] Implement a first-arm readiness flow on Android boat mode.
+- [x] Verify precise location, required background capability, and notifications.
+- [x] Explain/check Android power-saving risk and provide the correct settings deep link.
+- [x] Play a short test siren and require user confirmation that it was heard.
+- [x] Record the auxiliary-aid acknowledgement locally.
+- [x] Persist readiness completion locally and invalidate it if a required permission becomes unavailable.
+- [x] Add `Test alarm again` and readiness status to settings without cluttering the live dashboard.
 - [ ] Add units setting: System Default, Metres, Feet.
 
 ## 8. Units and formatting

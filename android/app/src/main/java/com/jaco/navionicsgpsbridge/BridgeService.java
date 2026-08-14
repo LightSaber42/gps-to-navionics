@@ -1285,6 +1285,7 @@ public final class BridgeService extends Service implements LocationListener,
     }
 
     private void createNotificationChannels() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
         NotificationChannel monitoringChannel = new NotificationChannel(
                 MONITORING_CHANNEL_ID,
                 getString(R.string.notification_channel_name),
@@ -1299,8 +1300,12 @@ public final class BridgeService extends Service implements LocationListener,
         alarmChannel.setSound(null, null);
         alarmChannel.enableVibration(true);
         alarmChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        try {
+            alarmChannel.setBypassDnd(manager.isNotificationPolicyAccessGranted());
+        } catch (RuntimeException ignored) {
+            // The readiness flow still requires an audible device test.
+        }
 
-        NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(monitoringChannel);
         manager.createNotificationChannel(alarmChannel);
     }

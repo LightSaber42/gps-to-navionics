@@ -3,12 +3,15 @@ package com.jaco.navionicsgpsbridge;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -16,10 +19,16 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Settings;
@@ -51,6 +60,12 @@ public final class MainActivity extends Activity implements
     private static final int PENDING_ARM_ANCHOR = 3;
     private static final int SECTION_BRIDGE = 0;
     private static final int SECTION_ANCHOR = 1;
+    private static final String ANCHOR_ALARM_CHANNEL_ID = "anchor_alarm_alerts";
+    private static final String KEY_READINESS_COMPLETE = "anchor_readiness_complete_v1";
+    private static final String KEY_READINESS_SIREN_CONFIRMED =
+            "anchor_readiness_siren_confirmed_v1";
+    private static final String KEY_READINESS_SAFETY_ACKNOWLEDGED =
+            "anchor_readiness_safety_acknowledged_v1";
 
     private final BroadcastReceiver powerSaveModeReceiver = new BroadcastReceiver() {
         @Override
@@ -65,6 +80,7 @@ public final class MainActivity extends Activity implements
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             binder = (BridgeService.LocalBinder) service;
+            syncAnchorAlarmChannelDndBypass();
             if (billingSnapshot != null) {
                 binder.updateEntitlementDecision(billingSnapshot.entitlementDecision);
             }
@@ -93,6 +109,24 @@ public final class MainActivity extends Activity implements
     private boolean lastRenderedAnchorTriggered;
     private AnchorAlarm.Mode selectedAnchorMode = AnchorAlarm.Mode.SHORELINED;
     private double selectedAnchorRadiusMeters = 15.0;
+    private final Handler readinessHandler = new Handler(Looper.getMainLooper());
+    private boolean resumeArmingAfterReadiness;
+    private boolean readinessSirenPlayedThisVisit;
+    private AlertDialog anchorReadinessDialog;
+    private Button readinessCompleteButton;
+    private Button readinessSirenButton;
+    private Button readinessSirenConfirmationButton;
+    private TextView readinessSirenStatus;
+    private CheckBox readinessSafetyAcknowledgement;
+    private ReadinessRowViews readinessLocationRow;
+    private ReadinessRowViews readinessBackgroundRow;
+    private ReadinessRowViews readinessNotificationRow;
+    private ReadinessRowViews readinessDndRow;
+    private ReadinessRowViews readinessPowerRow;
+    private Ringtone readinessRingtone;
+    private int readinessPreviousAlarmVolume = -1;
+    private String readinessSirenError;
+    private final List<Button> readinessStatusButtons = new ArrayList<>();
 
     private ScrollView pageScrollView;
     private TextView pageTitle;
@@ -192,6 +226,25 @@ public final class MainActivity extends Activity implements
         }
     }
 
+    private static final class ReadinessRowViews {
+        final LinearLayout container;
+        final TextView title;
+        final TextView detail;
+        final Button action;
+
+        ReadinessRowViews(
+                LinearLayout container,
+                TextView title,
+                TextView detail,
+                Button action
+        ) {
+            this.container = container;
+            this.title = title;
+            this.detail = detail;
+            this.action = action;
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -250,6 +303,11 @@ public final class MainActivity extends Activity implements
 
     @Override
     protected void onDestroy() {
+        stopReadinessSiren();
+        if (anchorReadinessDialog != null) {
+            anchorReadinessDialog.dismiss();
+            anchorReadinessDialog = null;
+        }
         billingStore.close();
         super.onDestroy();
     }
@@ -988,6 +1046,7 @@ public final class MainActivity extends Activity implements
         renderArmedAnchorDashboard(state);
         renderPowerSavingWarnings();
         renderShoreMonitorStatus(state);
+        updateAnchorReadinessDialog();
 
         String visibleError = state.error != null ? state.error : permissionError;
         errorText.setText(visibleError == null ? "" : visibleError);
@@ -1353,28 +1412,13 @@ public final class MainActivity extends Activity implements
                     .show();
             return;
         }
-        if (isLocationRestrictedByPowerSaving()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Turn off Power saving")
-                    .setMessage(
-                            "Power saving can stop or delay GPS when the screen locks. "
-                                    + "That can trigger a lost-GPS alarm after 30 seconds. "
-                                    + "Turn it off before relying on the anchor watch.")
-                    .setNegativeButton("Cancel", null)
-                    .setNeutralButton("Continue anyway", (dialog, which) ->
-                            continueAnchorPrimaryAction())
-                    .setPositiveButton("Open settings", (dialog, which) ->
-                            openPowerSavingSettings())
-                    .show();
-            return;
-        }
         continueAnchorPrimaryAction();
     }
 
     private void continueAnchorPrimaryAction() {
         if (latestState.anchorSetupActive || anchorSetupRequested) {
             if (latestState.hasAnchorReference) {
-                beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
+                beginAnchorArmWithReadiness();
             }
             return;
         }
@@ -1383,7 +1427,498 @@ public final class MainActivity extends Activity implements
             beginMarkAnchor();
             return;
         }
+        beginAnchorArmWithReadiness();
+    }
+
+    private void beginAnchorArmWithReadiness() {
+        if (!isAnchorReadinessComplete()) {
+            showAnchorReadiness(true);
+            return;
+        }
         beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
+    }
+
+    private void showAnchorReadiness(boolean resumeArming) {
+        resumeArmingAfterReadiness = resumeArmingAfterReadiness || resumeArming;
+        readinessSirenPlayedThisVisit = false;
+        readinessSirenError = null;
+        stopReadinessSiren();
+        if (anchorReadinessDialog != null) {
+            updateAnchorReadinessDialog();
+            return;
+        }
+
+        LinearLayout content = vertical();
+        content.setPadding(dp(20), dp(8), dp(20), dp(8));
+
+        TextView introduction = text(
+                "Confirm the permissions and alarm sound this boat phone needs while it "
+                        + "remains aboard. Changes are checked again before arming.",
+                14,
+                R.color.nav_secondary);
+        introduction.setLineSpacing(0.0f, 1.14f);
+        content.addView(introduction, matchWrap());
+
+        readinessLocationRow = buildReadinessRow(
+                "Precise Location",
+                "Precise GPS is required",
+                "Allow Location",
+                this::requestReadinessLocationPermission);
+        content.addView(readinessLocationRow.container, readinessRowParams());
+
+        readinessBackgroundRow = buildReadinessRow(
+                "Screen-locked GPS",
+                "Uses a location foreground service while the watch is active",
+                null,
+                null);
+        content.addView(readinessBackgroundRow.container, readinessRowParams());
+
+        readinessNotificationRow = buildReadinessRow(
+                "Notifications",
+                "Alarm notifications are required",
+                "Allow Notifications",
+                this::requestReadinessNotificationPermission);
+        content.addView(readinessNotificationRow.container, readinessRowParams());
+
+        readinessDndRow = buildReadinessRow(
+                "Do Not Disturb access",
+                "Allow alarms through supported Do Not Disturb modes",
+                "Open DND Access",
+                this::openDoNotDisturbAccessSettings);
+        content.addView(readinessDndRow.container, readinessRowParams());
+
+        readinessPowerRow = buildReadinessRow(
+                "Power settings",
+                "Power saving must not restrict location",
+                "Open Power Settings",
+                this::openAnchorPowerSettings);
+        content.addView(readinessPowerRow.container, readinessRowParams());
+
+        LinearLayout sirenSection = vertical();
+        TextView sirenTitle = text("Alarm sound test", 15, R.color.nav_text);
+        sirenTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        sirenSection.addView(sirenTitle, matchWrap());
+        readinessSirenStatus = text(
+                "Play the two-second siren, then confirm that you heard it",
+                13,
+                R.color.nav_secondary);
+        readinessSirenStatus.setLineSpacing(0.0f, 1.1f);
+        LinearLayout.LayoutParams sirenStatusParams = matchWrap();
+        sirenStatusParams.topMargin = dp(3);
+        sirenSection.addView(readinessSirenStatus, sirenStatusParams);
+        readinessSirenButton = smallButton(
+                "Play two-second siren",
+                this::playReadinessSiren);
+        sirenSection.addView(readinessSirenButton, wrapWrap());
+        readinessSirenConfirmationButton = smallButton(
+                "I heard the siren",
+                this::confirmReadinessSirenHeard);
+        sirenSection.addView(readinessSirenConfirmationButton, wrapWrap());
+        TextView soundLimitation = text(
+                "Test the actual phone volume and Do Not Disturb mode you will use aboard.",
+                12,
+                R.color.nav_secondary);
+        soundLimitation.setLineSpacing(0.0f, 1.1f);
+        sirenSection.addView(soundLimitation, matchWrap());
+        content.addView(sirenSection, readinessRowParams());
+
+        readinessSafetyAcknowledgement = new CheckBox(this);
+        readinessSafetyAcknowledgement.setText(
+                "I understand Anchor Watch is an auxiliary aid. It does not replace a "
+                        + "responsible anchor watch or independent navigation and safety equipment.");
+        readinessSafetyAcknowledgement.setTextSize(13);
+        readinessSafetyAcknowledgement.setTextColor(getColor(R.color.nav_text));
+        readinessSafetyAcknowledgement.setChecked(readinessPreferences().getBoolean(
+                KEY_READINESS_SAFETY_ACKNOWLEDGED,
+                false));
+        readinessSafetyAcknowledgement.setOnCheckedChangeListener((button, checked) -> {
+            SharedPreferences preferences = readinessPreferences();
+            SharedPreferences.Editor editor = preferences.edit()
+                    .putBoolean(KEY_READINESS_SAFETY_ACKNOWLEDGED, checked);
+            if (!checked) editor.putBoolean(KEY_READINESS_COMPLETE, false);
+            editor.apply();
+            updateAnchorReadinessDialog();
+        });
+        content.addView(readinessSafetyAcknowledgement, readinessRowParams());
+
+        TextView lifecycleWarning = text(
+                "Keep the ongoing monitoring notification visible and the phone powered. "
+                        + "After a force-stop or reboot, reopen the app and confirm the watch state.",
+                12,
+                R.color.nav_secondary);
+        lifecycleWarning.setLineSpacing(0.0f, 1.12f);
+        content.addView(lifecycleWarning, readinessRowParams());
+
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.addView(content, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        anchorReadinessDialog = new AlertDialog.Builder(this)
+                .setTitle("Safety Readiness")
+                .setView(scrollView)
+                .setNegativeButton("Close", null)
+                .setPositiveButton(
+                        resumeArmingAfterReadiness ? "Continue and arm" : "Save readiness",
+                        null)
+                .create();
+        anchorReadinessDialog.setOnShowListener(ignored -> {
+            readinessCompleteButton = anchorReadinessDialog.getButton(
+                    AlertDialog.BUTTON_POSITIVE);
+            readinessCompleteButton.setOnClickListener(view ->
+                    completeAnchorReadinessAndContinue());
+            updateAnchorReadinessDialog();
+        });
+        anchorReadinessDialog.setOnDismissListener(ignored -> {
+            anchorReadinessDialog = null;
+            readinessCompleteButton = null;
+            resumeArmingAfterReadiness = false;
+            stopReadinessSiren();
+        });
+        anchorReadinessDialog.show();
+    }
+
+    private ReadinessRowViews buildReadinessRow(
+            String title,
+            String detail,
+            String actionTitle,
+            Runnable action
+    ) {
+        LinearLayout container = vertical();
+        TextView titleView = text(title, 15, R.color.nav_text);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        container.addView(titleView, matchWrap());
+        TextView detailView = text(detail, 13, R.color.nav_secondary);
+        detailView.setLineSpacing(0.0f, 1.1f);
+        LinearLayout.LayoutParams detailParams = matchWrap();
+        detailParams.topMargin = dp(3);
+        container.addView(detailView, detailParams);
+        Button actionButton = null;
+        if (actionTitle != null && action != null) {
+            actionButton = smallButton(actionTitle, action);
+            container.addView(actionButton, wrapWrap());
+        }
+        return new ReadinessRowViews(container, titleView, detailView, actionButton);
+    }
+
+    private LinearLayout.LayoutParams readinessRowParams() {
+        LinearLayout.LayoutParams params = matchWrap();
+        params.topMargin = dp(16);
+        return params;
+    }
+
+    private void updateAnchorReadinessDialog() {
+        boolean complete = isAnchorReadinessComplete();
+        for (Button button : readinessStatusButtons) {
+            button.setText(complete
+                    ? "Safety readiness · Ready · Test alarm again"
+                    : "Safety readiness · Needs attention");
+            button.setTextColor(getColor(complete ? R.color.nav_success : R.color.nav_warning));
+        }
+        if (anchorReadinessDialog == null) return;
+        syncAnchorAlarmChannelDndBypass();
+
+        boolean locationReady = hasFineLocationPermission();
+        boolean notificationReady = areAnchorNotificationsReady();
+        boolean dndReady = hasDoNotDisturbAccess();
+        boolean powerReady = !isLocationRestrictedByPowerSaving();
+        boolean sirenConfirmed = readinessPreferences().getBoolean(
+                KEY_READINESS_SIREN_CONFIRMED,
+                false);
+
+        updateReadinessRow(
+                readinessLocationRow,
+                locationReady,
+                locationReady ? "Precise GPS allowed" : "Choose Precise Location",
+                locationReady ? null : "Allow Location");
+        updateReadinessRow(
+                readinessBackgroundRow,
+                true,
+                "The active location foreground service keeps GPS running with the screen locked",
+                null);
+        updateReadinessRow(
+                readinessNotificationRow,
+                notificationReady,
+                notificationReady
+                        ? "Alarm notifications enabled"
+                        : "Enable app and alarm-channel notifications",
+                notificationReady ? null : notificationActionTitle());
+        updateReadinessRow(
+                readinessDndRow,
+                dndReady,
+                dndReady
+                        ? "Do Not Disturb access granted"
+                        : "Grant access, then test the alarm in your chosen DND mode",
+                dndReady ? null : "Open DND Access");
+        updateReadinessRow(
+                readinessPowerRow,
+                powerReady,
+                powerReady
+                        ? "No restrictive system Power Saving mode detected; set app battery "
+                                + "use to Unrestricted if offered"
+                        : "Power Saving can stop or delay GPS after the screen locks",
+                powerReady ? "Review Battery Settings" : "Open Power Settings");
+
+        if (readinessSafetyAcknowledgement != null) {
+            readinessSafetyAcknowledgement.setChecked(readinessPreferences().getBoolean(
+                    KEY_READINESS_SAFETY_ACKNOWLEDGED,
+                    false));
+        }
+        if (readinessSirenStatus != null) {
+            String sirenStatus;
+            int sirenStatusColor;
+            if (readinessSirenError != null) {
+                sirenStatus = readinessSirenError;
+                sirenStatusColor = R.color.nav_error;
+            } else if (sirenConfirmed) {
+                sirenStatus = "✓  Siren confirmed on this phone";
+                sirenStatusColor = R.color.nav_success;
+            } else {
+                sirenStatus = "Play the two-second siren, then confirm that you heard it";
+                sirenStatusColor = R.color.nav_secondary;
+            }
+            readinessSirenStatus.setText(sirenStatus);
+            readinessSirenStatus.setTextColor(getColor(sirenStatusColor));
+        }
+        if (readinessSirenButton != null) {
+            boolean canTest = !latestState.anchorAlarmArmed;
+            readinessSirenButton.setEnabled(canTest);
+            readinessSirenButton.setText(canTest
+                    ? sirenConfirmed ? "Test alarm again" : "Play two-second siren"
+                    : "Disarm before testing again");
+        }
+        if (readinessSirenConfirmationButton != null) {
+            readinessSirenConfirmationButton.setVisibility(
+                    readinessSirenPlayedThisVisit && !sirenConfirmed
+                            ? View.VISIBLE : View.GONE);
+        }
+        if (readinessCompleteButton != null) {
+            readinessCompleteButton.setText(
+                    resumeArmingAfterReadiness ? "Continue and arm" : "Save readiness");
+            readinessCompleteButton.setEnabled(anchorReadinessRequirementsSatisfied());
+        }
+    }
+
+    private void updateReadinessRow(
+            ReadinessRowViews row,
+            boolean ready,
+            String detail,
+            String actionTitle
+    ) {
+        if (row == null) return;
+        String rawTitle = row.title.getText().toString();
+        if (rawTitle.startsWith("✓  ") || rawTitle.startsWith("⚠  ")) {
+            rawTitle = rawTitle.substring(3);
+        }
+        row.title.setText((ready ? "✓  " : "⚠  ") + rawTitle);
+        row.title.setTextColor(getColor(ready ? R.color.nav_success : R.color.nav_warning));
+        row.detail.setText(detail);
+        if (row.action != null) {
+            row.action.setVisibility(actionTitle == null ? View.GONE : View.VISIBLE);
+            if (actionTitle != null) row.action.setText(actionTitle);
+        }
+    }
+
+    private boolean anchorReadinessRequirementsSatisfied() {
+        SharedPreferences preferences = readinessPreferences();
+        return hasFineLocationPermission()
+                && areAnchorNotificationsReady()
+                && hasDoNotDisturbAccess()
+                && !isLocationRestrictedByPowerSaving()
+                && preferences.getBoolean(KEY_READINESS_SIREN_CONFIRMED, false)
+                && preferences.getBoolean(KEY_READINESS_SAFETY_ACKNOWLEDGED, false);
+    }
+
+    private boolean isAnchorReadinessComplete() {
+        SharedPreferences preferences = readinessPreferences();
+        boolean wasComplete = preferences.getBoolean(KEY_READINESS_COMPLETE, false);
+        boolean requirementsSatisfied = anchorReadinessRequirementsSatisfied();
+        if (wasComplete && !requirementsSatisfied) {
+            preferences.edit().putBoolean(KEY_READINESS_COMPLETE, false).apply();
+        }
+        return wasComplete && requirementsSatisfied;
+    }
+
+    private void completeAnchorReadinessAndContinue() {
+        if (!anchorReadinessRequirementsSatisfied()) return;
+        readinessPreferences().edit().putBoolean(KEY_READINESS_COMPLETE, true).apply();
+        boolean shouldResumeArming = resumeArmingAfterReadiness;
+        resumeArmingAfterReadiness = false;
+        if (anchorReadinessDialog != null) anchorReadinessDialog.dismiss();
+        if (shouldResumeArming) beginPermissionProtectedAction(PENDING_ARM_ANCHOR);
+        else render(latestState);
+    }
+
+    private SharedPreferences readinessPreferences() {
+        return getPreferences(MODE_PRIVATE);
+    }
+
+    private boolean areAnchorNotificationsReady() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) return false;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null || !manager.areNotificationsEnabled()) return false;
+        NotificationChannel channel = manager.getNotificationChannel(ANCHOR_ALARM_CHANNEL_ID);
+        return channel == null || channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
+    }
+
+    private boolean hasDoNotDisturbAccess() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        return manager != null && manager.isNotificationPolicyAccessGranted();
+    }
+
+    private void syncAnchorAlarmChannelDndBypass() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        NotificationChannel channel = manager.getNotificationChannel(ANCHOR_ALARM_CHANNEL_ID);
+        if (channel == null) return;
+        try {
+            boolean shouldBypass = manager.isNotificationPolicyAccessGranted();
+            if (channel.canBypassDnd() == shouldBypass) return;
+            channel.setBypassDnd(shouldBypass);
+            manager.createNotificationChannel(channel);
+        } catch (RuntimeException ignored) {
+            // The confirmed audible siren test remains the final readiness check.
+        }
+    }
+
+    private void requestReadinessLocationPermission() {
+        if (hasFineLocationPermission()) {
+            openAppSettings();
+            return;
+        }
+        readinessPreferences().edit().putBoolean("permission_requested", true).apply();
+        requestPermissions(new String[]{
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        }, PERMISSION_REQUEST);
+    }
+
+    private void requestReadinessNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    PERMISSION_REQUEST);
+            return;
+        }
+        openNotificationSettings();
+    }
+
+    private String notificationActionTitle() {
+        return Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+                ? "Allow Notifications" : "Open Notification Settings";
+    }
+
+    private void openNotificationSettings() {
+        Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException ignored) {
+            openAppSettings();
+        }
+    }
+
+    private void openDoNotDisturbAccessSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
+        } catch (ActivityNotFoundException ignored) {
+            startActivity(new Intent(Settings.ACTION_SOUND_SETTINGS));
+        }
+    }
+
+    private void openAnchorPowerSettings() {
+        if (isLocationRestrictedByPowerSaving()) {
+            openPowerSavingSettings();
+            return;
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        } catch (ActivityNotFoundException ignored) {
+            openAppSettings();
+        }
+    }
+
+    private void playReadinessSiren() {
+        if (latestState.anchorAlarmArmed) return;
+        stopReadinessSiren();
+        readinessSirenError = null;
+        try {
+            AudioManager audioManager = getSystemService(AudioManager.class);
+            if (audioManager != null) {
+                readinessPreviousAlarmVolume = audioManager.getStreamVolume(
+                        AudioManager.STREAM_ALARM);
+                audioManager.setStreamVolume(
+                        AudioManager.STREAM_ALARM,
+                        audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                        0);
+            }
+            Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (alarmUri == null) {
+                alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            }
+            readinessRingtone = RingtoneManager.getRingtone(this, alarmUri);
+            if (readinessRingtone == null) throw new IllegalStateException("No alarm sound found");
+            readinessRingtone.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                    .build());
+            if (Build.VERSION.SDK_INT >= 28) {
+                readinessRingtone.setLooping(true);
+                readinessRingtone.setVolume(1.0f);
+            }
+            readinessRingtone.play();
+            readinessSirenPlayedThisVisit = true;
+            readinessHandler.postDelayed(this::stopReadinessSiren, 2_000L);
+        } catch (RuntimeException error) {
+            readinessSirenPlayedThisVisit = false;
+            readinessSirenError = "The test siren could not start. Check alarm sound settings.";
+            stopReadinessSiren();
+        }
+        updateAnchorReadinessDialog();
+    }
+
+    private void confirmReadinessSirenHeard() {
+        if (!readinessSirenPlayedThisVisit) return;
+        stopReadinessSiren();
+        readinessPreferences().edit()
+                .putBoolean(KEY_READINESS_SIREN_CONFIRMED, true)
+                .apply();
+        updateAnchorReadinessDialog();
+    }
+
+    private void stopReadinessSiren() {
+        readinessHandler.removeCallbacksAndMessages(null);
+        if (readinessRingtone != null) {
+            try {
+                readinessRingtone.stop();
+            } catch (RuntimeException ignored) {
+                // The readiness UI can still explain the failed test.
+            }
+            readinessRingtone = null;
+        }
+        if (readinessPreviousAlarmVolume >= 0) {
+            try {
+                AudioManager audioManager = getSystemService(AudioManager.class);
+                if (audioManager != null) {
+                    audioManager.setStreamVolume(
+                            AudioManager.STREAM_ALARM,
+                            Math.min(
+                                    readinessPreviousAlarmVolume,
+                                    audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)),
+                            0);
+                }
+            } catch (RuntimeException ignored) {
+                // The short test is already stopped.
+            }
+            readinessPreviousAlarmVolume = -1;
+        }
     }
 
     private void beginMarkAnchor() {
@@ -1489,6 +2024,13 @@ public final class MainActivity extends Activity implements
             return;
         }
 
+        if (action == PENDING_ARM_ANCHOR && !isAnchorReadinessComplete()) {
+            anchorActionMessage = "Complete the safety readiness check before arming.";
+            renderAnchorAlarm(latestState);
+            showAnchorReadiness(true);
+            return;
+        }
+
         double referenceLatitude = selectedAnchorMode == AnchorAlarm.Mode.SHORELINED
                 ? latestState.latitude : latestState.anchorReferenceLatitude;
         double referenceLongitude = selectedAnchorMode == AnchorAlarm.Mode.SHORELINED
@@ -1508,6 +2050,7 @@ public final class MainActivity extends Activity implements
             int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode != PERMISSION_REQUEST) return;
+        updateAnchorReadinessDialog();
         if (hasFineLocationPermission()) {
             permissionError = null;
             if (binder != null) binder.refreshLocationUpdates();
@@ -1930,6 +2473,12 @@ public final class MainActivity extends Activity implements
                 R.color.nav_secondary);
         behavior.setLineSpacing(0.0f, 1.12f);
         card.addView(behavior, matchWrap());
+        addDivider(card);
+        Button readiness = smallButton(
+                "Safety readiness · Needs attention",
+                () -> showAnchorReadiness(false));
+        readinessStatusButtons.add(readiness);
+        card.addView(readiness, wrapWrap());
         return card;
     }
 
