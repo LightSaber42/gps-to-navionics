@@ -29,6 +29,7 @@
 		D10000000000000000000001 /* EntitlementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* EntitlementPolicyTests.swift */; };
 		D10000000000000000000002 /* EntitlementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* EntitlementPolicy.swift */; };
 		D10000000000000000000003 /* PurchaseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* PurchaseStore.swift */; };
+		E10000000000000000000001 /* DisplayUnits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DisplayUnits.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +69,7 @@
 		D20000000000000000000002 /* EntitlementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementPolicy.swift; sourceTree = "<group>"; };
 		D20000000000000000000003 /* PurchaseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseStore.swift; sourceTree = "<group>"; };
 		D20000000000000000000004 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
+		E20000000000000000000001 /* DisplayUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayUnits.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +121,7 @@
 				C20000000000000000000001 /* AnchorPairingView.swift */,
 				D20000000000000000000002 /* EntitlementPolicy.swift */,
 				D20000000000000000000003 /* PurchaseStore.swift */,
+				E20000000000000000000001 /* DisplayUnits.swift */,
 				B20000000000000000000002 /* BridgeController.swift */,
 				B20000000000000000000003 /* ContentView.swift */,
 			);
@@ -284,6 +287,7 @@
 				C10000000000000000000009 /* AnchorPairingAddressProvider.swift in Sources */,
 				D10000000000000000000002 /* EntitlementPolicy.swift in Sources */,
 				D10000000000000000000003 /* PurchaseStore.swift in Sources */,
+				E10000000000000000000001 /* DisplayUnits.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

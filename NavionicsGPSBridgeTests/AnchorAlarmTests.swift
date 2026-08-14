@@ -66,6 +66,51 @@ final class AnchorAlarmTests: XCTestCase {
         XCTAssertEqual(AnchorAlarmMode.freeSwinging.adjustedRadius(500), 200)
     }
 
+    func testSystemDisplayUnitsFollowLocaleMeasurementSystem() {
+        XCTAssertEqual(
+            DisplayUnitPreference.system.resolvedUnit(locale: Locale(identifier: "en_US")),
+            .feet
+        )
+        XCTAssertEqual(
+            DisplayUnitPreference.system.resolvedUnit(locale: Locale(identifier: "en_GB")),
+            .metres
+        )
+        XCTAssertEqual(
+            DisplayUnitPreference.metres.resolvedUnit(locale: Locale(identifier: "en_US")),
+            .metres
+        )
+        XCTAssertEqual(
+            DisplayUnitPreference.feet.resolvedUnit(locale: Locale(identifier: "fr_FR")),
+            .feet
+        )
+    }
+
+    func testFeetFormattingRoundsAnchorBoundariesAndModeSteps() {
+        let formatter = DistanceDisplayFormatter(
+            preference: .feet,
+            locale: Locale(identifier: "en_US")
+        )
+
+        XCTAssertEqual(formatter.format(metres: 3, fractionDigits: 1), "9.8 ft")
+        XCTAssertEqual(formatter.format(metres: 50), "164 ft")
+        XCTAssertEqual(
+            formatter.range(
+                minimumMetres: AnchorAlarmMode.shorelined.minimumRadiusMeters,
+                maximumMetres: AnchorAlarmMode.shorelined.maximumRadiusMeters,
+                stepMetres: AnchorAlarmMode.shorelined.radiusStepMeters
+            ),
+            "10–164 ft range • 3 ft steps"
+        )
+        XCTAssertEqual(
+            formatter.range(
+                minimumMetres: AnchorAlarmMode.freeSwinging.minimumRadiusMeters,
+                maximumMetres: AnchorAlarmMode.freeSwinging.maximumRadiusMeters,
+                stepMetres: AnchorAlarmMode.freeSwinging.radiusStepMeters
+            ),
+            "16–656 ft range • 16 ft steps"
+        )
+    }
+
     func testGoodGPSPrecisionDoesNotWarn() {
         XCTAssertNil(AnchorGPSQuality.degradedWarning(
             accuracyMeters: 1,

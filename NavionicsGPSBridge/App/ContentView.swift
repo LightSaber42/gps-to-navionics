@@ -479,7 +479,8 @@ struct ContentView: View {
             AnchorDriftPlot(
                 points: controller.anchorTrackPoints,
                 limitMeters: controller.anchorRadiusMeters,
-                alarmTriggered: controller.anchorAlarmTriggered
+                alarmTriggered: controller.anchorAlarmTriggered,
+                displayUnitPreference: controller.displayUnitPreference
             )
             .aspectRatio(1, contentMode: .fit)
             .frame(maxHeight: 420)
@@ -513,12 +514,15 @@ struct ContentView: View {
 
             VStack(spacing: 2) {
                 Text(controller.anchorDistanceMeters.map {
-                    String(format: "%.1f m", $0)
+                    controller.formatDistance($0, fractionDigits: 1)
                 } ?? "—")
                     .font(.system(size: 42, weight: .bold, design: .rounded))
                     .foregroundStyle(controller.anchorAlarmTriggered ? .red : .primary)
                     .contentTransition(.numericText())
-                Text(String(format: "distance from reference • %.0f m limit", controller.anchorRadiusMeters))
+                Text(
+                    "distance from reference • "
+                        + "\(controller.formatDistance(controller.anchorRadiusMeters)) limit"
+                )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -634,7 +638,7 @@ struct ContentView: View {
                 .disabled(controller.anchorRadiusMeters <= controller.anchorMode.minimumRadiusMeters)
                 .accessibilityLabel("Decrease \(title.lowercased())")
 
-                Text(String(format: "%.0f m", controller.anchorRadiusMeters))
+                Text(controller.formatDistance(controller.anchorRadiusMeters))
                     .font(.headline.monospacedDigit())
                     .frame(minWidth: 56)
                     .contentTransition(.numericText())
@@ -664,17 +668,10 @@ struct ContentView: View {
 
     private func radiusHint(adjustableWhileArmed: Bool) -> String {
         if adjustableWhileArmed {
-            return String(
-                format: "Adjustable while anchored • %.0f m steps",
-                controller.anchorMode.radiusStepMeters
-            )
+            return "Adjustable while anchored • "
+                + "\(controller.formatDistance(controller.anchorMode.radiusStepMeters)) steps"
         }
-        return String(
-            format: "%.0f–%.0f m range • %.0f m steps",
-            controller.anchorMode.minimumRadiusMeters,
-            controller.anchorMode.maximumRadiusMeters,
-            controller.anchorMode.radiusStepMeters
-        )
+        return controller.formatRadiusRange(for: controller.anchorMode)
     }
 
     private var shoreMonitorCard: some View {
@@ -830,6 +827,18 @@ struct ContentView: View {
                     action: controller.showAnchorReadinessSettings
                 )
                 .buttonStyle(.bordered)
+                Picker(
+                    "Display units",
+                    selection: Binding(
+                        get: { controller.displayUnitPreference },
+                        set: controller.setDisplayUnitPreference
+                    )
+                ) {
+                    ForEach(DisplayUnitPreference.allCases) { preference in
+                        Text(preference.detail()).tag(preference)
+                    }
+                }
+                .pickerStyle(.menu)
             }
             .padding(.top, 8)
         } label: {
@@ -1103,6 +1112,7 @@ private struct AnchorDriftPlot: View {
     let points: [AnchorTrackPoint]
     let limitMeters: Double
     let alarmTriggered: Bool
+    let displayUnitPreference: DisplayUnitPreference
 
     var body: some View {
         Canvas { context, size in
@@ -1243,7 +1253,7 @@ private struct AnchorDriftPlot: View {
                 at: CGPoint(x: center.x, y: 12)
             )
             context.draw(
-                Text(String(format: "%.0f m limit", limitMeters))
+                Text("\(distanceFormatter.format(metres: limitMeters)) limit")
                     .font(.caption2.bold())
                     .foregroundColor(alarmTriggered ? .red : .orange),
                 at: CGPoint(x: center.x, y: center.y - limitRadius),
@@ -1263,14 +1273,17 @@ private struct AnchorDriftPlot: View {
 
     private var accessibilityValue: String {
         guard let current = points.last else {
-            return String(format: "Waiting for GPS points. Alarm limit %.0f metres.", limitMeters)
+            return "Waiting for GPS points. Alarm limit "
+                + "\(distanceFormatter.format(metres: limitMeters))."
         }
-        return String(
-            format: "Current drift %.1f metres. Alarm limit %.0f metres. %d GPS points plotted.",
-            hypot(current.eastMeters, current.northMeters),
-            limitMeters,
-            points.count
-        )
+        return "Current drift "
+            + "\(distanceFormatter.format(metres: hypot(current.eastMeters, current.northMeters), fractionDigits: 1)). "
+            + "Alarm limit \(distanceFormatter.format(metres: limitMeters)). "
+            + "\(points.count) GPS points plotted."
+    }
+
+    private var distanceFormatter: DistanceDisplayFormatter {
+        DistanceDisplayFormatter(preference: displayUnitPreference)
     }
 }
 

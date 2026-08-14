@@ -80,7 +80,8 @@ enum AnchorGPSQuality {
 
     static func degradedWarning(
         accuracyMeters: Double?,
-        radiusMeters: Double
+        radiusMeters: Double,
+        displayFormatter: DistanceDisplayFormatter? = nil
     ) -> String? {
         guard let accuracyMeters,
               accuracyMeters.isFinite,
@@ -92,12 +93,15 @@ enum AnchorGPSQuality {
             radiusMeters * maximumAccuracyFractionOfRadius
         )
         guard accuracyMeters > warningThreshold else { return nil }
-        return String(
-            format: "GPS precision is degraded (±%.0f m) for a %.0f m alarm limit. With this fix, the conservative alarm needs about %.0f m of measured drift to confirm a breach. Give the boat phone a clearer view of the sky.",
-            accuracyMeters,
-            radiusMeters,
-            radiusMeters + accuracyMeters
+        let formatter = displayFormatter ?? DistanceDisplayFormatter(
+            preference: .metres,
+            locale: Locale(identifier: "en_US_POSIX")
         )
+        return "GPS precision is degraded (\(formatter.formatAccuracy(metres: accuracyMeters))) "
+            + "for a \(formatter.format(metres: radiusMeters)) alarm limit. With this fix, "
+            + "the conservative alarm needs about "
+            + "\(formatter.format(metres: radiusMeters + accuracyMeters)) of measured drift "
+            + "to confirm a breach. Give the boat phone a clearer view of the sky."
     }
 }
 

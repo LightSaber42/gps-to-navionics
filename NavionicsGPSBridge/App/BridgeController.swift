@@ -31,6 +31,7 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var shoreMonitorSoundReady = false
     @Published private(set) var anchorPairingURL: URL?
     @Published private(set) var entitlementDecision = EntitlementDecision(featureLevel: .free)
+    @Published private(set) var displayUnitPreference = DisplayUnitPreference.system
     @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var anchorReadinessPresented = false
     @Published private(set) var anchorReadinessWasCompleted = false
@@ -60,6 +61,7 @@ final class BridgeController: NSObject, ObservableObject,
         static let readinessSirenConfirmed = "anchor.readiness.sirenConfirmed.v1"
         static let readinessSafetyAcknowledged =
             "anchor.readiness.safetyAcknowledged.v1"
+        static let displayUnitPreference = "display.units.preference.v1"
     }
 
     private static let alarmCategoryIdentifier = "ANCHOR_ALARM"
@@ -114,6 +116,9 @@ final class BridgeController: NSObject, ObservableObject,
         readinessSafetyAcknowledged = defaults.bool(
             forKey: DefaultsKey.readinessSafetyAcknowledged
         )
+        displayUnitPreference = DisplayUnitPreference(
+            rawValue: defaults.string(forKey: DefaultsKey.displayUnitPreference) ?? ""
+        ) ?? .system
         let entitlementCache = EntitlementCacheStore().load()
         entitlementDecision = Self.effectiveEntitlementDecision(
             EntitlementPolicy.evaluate(
@@ -273,11 +278,8 @@ final class BridgeController: NSObject, ObservableObject,
 
     var anchorDistanceDescription: String {
         guard let anchorDistanceMeters else { return "—" }
-        return String(
-            format: "%.1f m / %.0f m limit",
-            anchorDistanceMeters,
-            anchorRadiusMeters
-        )
+        return "\(formatDistance(anchorDistanceMeters, fractionDigits: 1)) / "
+            + "\(formatDistance(anchorRadiusMeters)) limit"
     }
 
     var authorizationDescription: String {
@@ -388,15 +390,50 @@ final class BridgeController: NSObject, ObservableObject,
 
     var accuracyDescription: String {
         guard let latestLocation, latestLocation.horizontalAccuracy >= 0 else { return "—" }
-        return String(format: "±%.0f m", latestLocation.horizontalAccuracy)
+        return distanceDisplayFormatter.formatAccuracy(
+            metres: latestLocation.horizontalAccuracy
+        )
     }
 
     var degradedAnchorGPSWarning: String? {
         guard currentFixAge <= Self.staleFixSeconds else { return nil }
         return AnchorGPSQuality.degradedWarning(
             accuracyMeters: latestLocation?.horizontalAccuracy,
-            radiusMeters: anchorRadiusMeters
+            radiusMeters: anchorRadiusMeters,
+            displayFormatter: distanceDisplayFormatter
         )
+    }
+
+    var displayUnitPreferenceDetail: String {
+        displayUnitPreference.detail()
+    }
+
+    func formatDistance(_ metres: Double, fractionDigits: Int = 0) -> String {
+        distanceDisplayFormatter.format(
+            metres: metres,
+            fractionDigits: fractionDigits
+        )
+    }
+
+    func formatAccuracy(_ metres: Double) -> String {
+        distanceDisplayFormatter.formatAccuracy(metres: metres)
+    }
+
+    func formatRadiusRange(for mode: AnchorAlarmMode) -> String {
+        distanceDisplayFormatter.range(
+            minimumMetres: mode.minimumRadiusMeters,
+            maximumMetres: mode.maximumRadiusMeters,
+            stepMetres: mode.radiusStepMeters
+        )
+    }
+
+    func setDisplayUnitPreference(_ preference: DisplayUnitPreference) {
+        displayUnitPreference = preference
+        defaults.set(preference.rawValue, forKey: DefaultsKey.displayUnitPreference)
+    }
+
+    private var distanceDisplayFormatter: DistanceDisplayFormatter {
+        DistanceDisplayFormatter(preference: displayUnitPreference)
     }
 
     var speedDescription: String {
@@ -886,11 +923,9 @@ final class BridgeController: NSObject, ObservableObject,
             }
             guard latestLocation.horizontalAccuracy
                     <= Self.maximumAnchorReferenceAccuracyMeters else {
-                anchorActionMessage = String(
-                    format: "Improving GPS accuracy… currently ±%.0f m; need ±%.0f m.",
-                    latestLocation.horizontalAccuracy,
-                    Self.maximumAnchorReferenceAccuracyMeters
-                )
+                anchorActionMessage = "Improving GPS accuracy… currently "
+                    + "\(formatAccuracy(latestLocation.horizontalAccuracy)); need "
+                    + "\(formatAccuracy(Self.maximumAnchorReferenceAccuracyMeters))."
                 return
             }
         }
@@ -1087,17 +1122,14 @@ final class BridgeController: NSObject, ObservableObject,
         let reason: String
         switch anchorMode {
         case .shorelined:
-            reason = String(
-                format: "Boat moved %.1f m from the shore-tied position (limit %.0f m).",
-                assessment.distanceMeters,
-                anchorRadiusMeters
-            )
+            reason = "Boat moved "
+                + "\(formatDistance(assessment.distanceMeters, fractionDigits: 1)) "
+                + "from the shore-tied position "
+                + "(limit \(formatDistance(anchorRadiusMeters)))."
         case .freeSwinging:
-            reason = String(
-                format: "Boat moved %.1f m from the anchor (swing limit %.0f m).",
-                assessment.distanceMeters,
-                anchorRadiusMeters
-            )
+            reason = "Boat moved "
+                + "\(formatDistance(assessment.distanceMeters, fractionDigits: 1)) "
+                + "from the anchor (swing limit \(formatDistance(anchorRadiusMeters)))."
         }
         breachEventIssued = true
         triggerAnchorAlarm(reason: reason, kind: "drift")
