@@ -56,6 +56,7 @@ public final class ShoreMonitorActivity extends Activity
 
     private ShoreMonitorService.LocalBinder binder;
     private boolean bound;
+    private ShoreMonitorState latestState;
     private TextView statusValue;
     private TextView alarmValue;
     private TextView distanceValue;
@@ -76,6 +77,7 @@ public final class ShoreMonitorActivity extends Activity
     private Button startButton;
     private Button stopButton;
     private Button unpairButton;
+    private Button displayUnitsButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,6 +108,13 @@ public final class ShoreMonitorActivity extends Activity
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        updateDisplayUnitButton();
+        if (latestState != null) render(latestState);
+    }
+
+    @Override
     protected void onStop() {
         if (binder != null) {
             binder.setHistoryVisible(false);
@@ -119,7 +128,10 @@ public final class ShoreMonitorActivity extends Activity
 
     @Override
     public void onShoreMonitorStateChanged(ShoreMonitorState state) {
-        runOnUiThread(() -> render(state));
+        runOnUiThread(() -> {
+            latestState = state;
+            render(state);
+        });
     }
 
     private View buildContent() {
@@ -166,6 +178,13 @@ public final class ShoreMonitorActivity extends Activity
         statusValue = detail(statusCard, "Connection", "Not paired");
         readinessValue = detail(statusCard, "Alarm sound", "Needs setup");
         heartbeatValue = detail(statusCard, "Last heartbeat", "—");
+        displayUnitsButton = button(
+                "Display units · " + DisplayUnits.load(this).preferenceDetail(),
+                R.color.nav_blue_dark);
+        displayUnitsButton.setOnClickListener(view -> showDisplayUnitPicker());
+        LinearLayout.LayoutParams displayUnitsParams = matchWrap();
+        displayUnitsParams.topMargin = dp(10);
+        statusCard.addView(displayUnitsButton, displayUnitsParams);
         page.addView(statusCard, cardParams());
 
         LinearLayout remoteAccessCard = warningCard();
@@ -342,6 +361,8 @@ public final class ShoreMonitorActivity extends Activity
     }
 
     private void render(ShoreMonitorState state) {
+        DisplayUnits displayUnits = DisplayUnits.load(this);
+        updateDisplayUnitButton();
         boolean paired = state.paired;
         boolean enabled = paired && state.enabled;
         pairingCard.setVisibility(paired ? View.GONE : View.VISIBLE);
@@ -370,18 +391,49 @@ public final class ShoreMonitorActivity extends Activity
         silenceButton.setVisibility(state.alarmActive ? View.VISIBLE : View.GONE);
         String gpsWarning = state.connected && state.armed
                 ? AnchorGpsQuality.degradedWarning(
-                        state.accuracyMeters, state.radiusMeters)
+                        state.accuracyMeters,
+                        state.radiusMeters,
+                        displayUnits)
                 : null;
         gpsAccuracyWarning.setText(gpsWarning == null ? "" : gpsWarning);
         gpsAccuracyCard.setVisibility(gpsWarning == null ? View.GONE : View.VISIBLE);
         distanceValue.setText(Double.isFinite(state.distanceMeters)
-                ? String.format(Locale.US, "%.1f m", state.distanceMeters) : "—");
-        limitValue.setText(String.format(Locale.US, "%.0f m", state.radiusMeters));
+                ? displayUnits.format(state.distanceMeters, 1) : "—");
+        limitValue.setText(displayUnits.format(state.radiusMeters));
         batteryValue.setText(state.boatBatteryPercent < 0
                 ? "Unknown"
                 : state.boatBatteryPercent + "%" + (state.boatCharging ? " • charging" : ""));
+        plotView.setDisplayUnits(displayUnits);
         plotView.setRemoteState(
                 state.history, state.radiusMeters, state.alarmActive, state.distanceMeters);
+    }
+
+    private void showDisplayUnitPicker() {
+        DisplayUnits.Preference[] preferences = DisplayUnits.Preference.values();
+        String[] labels = new String[preferences.length];
+        DisplayUnits.Preference selectedPreference = DisplayUnits.loadPreference(this);
+        int selectedIndex = 0;
+        for (int index = 0; index < preferences.length; index++) {
+            DisplayUnits candidate = new DisplayUnits(preferences[index], Locale.getDefault());
+            labels[index] = candidate.preferenceDetail();
+            if (preferences[index] == selectedPreference) selectedIndex = index;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Display units")
+                .setSingleChoiceItems(labels, selectedIndex, (dialog, position) -> {
+                    DisplayUnits.save(this, preferences[position]);
+                    dialog.dismiss();
+                    updateDisplayUnitButton();
+                    if (latestState != null) render(latestState);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void updateDisplayUnitButton() {
+        if (displayUnitsButton == null) return;
+        displayUnitsButton.setText(
+                "Display units · " + DisplayUnits.load(this).preferenceDetail());
     }
 
     private void handlePairingIntent(Intent intent) {

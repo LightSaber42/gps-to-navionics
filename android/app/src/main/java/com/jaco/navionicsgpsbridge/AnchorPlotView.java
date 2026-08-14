@@ -11,7 +11,6 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 /** North-up, automatically scaled plot of the recent anchor-watch GPS trail. */
 final class AnchorPlotView extends View {
@@ -19,11 +18,17 @@ final class AnchorPlotView extends View {
     private List<BridgeState.AnchorTrackPoint> points = Collections.emptyList();
     private double limitMeters = 15.0;
     private boolean alarmTriggered;
+    private DisplayUnits displayUnits;
 
     AnchorPlotView(Context context) {
         super(context);
+        displayUnits = DisplayUnits.load(context);
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         setContentDescription("Anchor drift plot. Waiting for GPS points.");
+    }
+
+    void setDisplayUnits(DisplayUnits displayUnits) {
+        this.displayUnits = displayUnits;
     }
 
     void setState(BridgeState state) {
@@ -40,13 +45,10 @@ final class AnchorPlotView extends View {
         limitMeters = newLimitMeters;
         alarmTriggered = newAlarmTriggered;
         String distance = Double.isFinite(distanceMeters)
-                ? String.format(Locale.US, "Current drift %.1f metres. ", distanceMeters)
+                ? "Current drift " + displayUnits.format(distanceMeters, 1) + ". "
                 : "Waiting for a current GPS fix. ";
-        setContentDescription(distance + String.format(
-                Locale.US,
-                "Alarm limit %.0f metres. %d GPS points plotted.",
-                limitMeters,
-                points.size()));
+        setContentDescription(distance + "Alarm limit " + displayUnits.format(limitMeters)
+                + ". " + points.size() + " GPS points plotted.");
         invalidate();
     }
 
@@ -193,7 +195,7 @@ final class AnchorPlotView extends View {
         paint.setTextSize(dp(11));
         paint.setColor(color(alarmTriggered ? R.color.nav_error : R.color.nav_warning));
         float labelY = Math.max(dp(29), centerY - limitRadius - dp(5));
-        canvas.drawText(String.format(Locale.US, "%.0f m limit", limitMeters), centerX, labelY, paint);
+        canvas.drawText(displayUnits.format(limitMeters) + " limit", centerX, labelY, paint);
     }
 
     private int withAlpha(int color, int alpha) {

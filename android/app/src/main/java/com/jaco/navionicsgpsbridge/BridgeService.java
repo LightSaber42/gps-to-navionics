@@ -908,13 +908,14 @@ public final class BridgeService extends Service implements LocationListener,
             if (breachStartedElapsedMillis == 0L) breachStartedElapsedMillis = now;
             if (now - breachStartedElapsedMillis >= BREACH_CONFIRMATION_MILLIS) {
                 shouldTrigger = true;
+                DisplayUnits displayUnits = DisplayUnits.load(this);
                 reason = anchorMode == AnchorAlarm.Mode.SHORELINED
-                        ? String.format(Locale.US,
-                        "Boat moved %.1f m from the shore-tied position (limit %.0f m).",
-                        assessment.distanceMeters, anchorRadiusMeters)
-                        : String.format(Locale.US,
-                        "Boat moved %.1f m from the anchor (swing limit %.0f m).",
-                        assessment.distanceMeters, anchorRadiusMeters);
+                        ? "Boat moved " + displayUnits.format(assessment.distanceMeters, 1)
+                        + " from the shore-tied position (limit "
+                        + displayUnits.format(anchorRadiusMeters) + ")."
+                        : "Boat moved " + displayUnits.format(assessment.distanceMeters, 1)
+                        + " from the anchor (swing limit "
+                        + displayUnits.format(anchorRadiusMeters) + ").";
                 breachEventIssued = true;
             }
         }
@@ -1399,14 +1400,15 @@ public final class BridgeService extends Service implements LocationListener,
 
     private String anchorNotificationText(BridgeState state) {
         if (state.anchorAlarmSilenced) return "Alarm silenced • monitoring continues";
+        DisplayUnits displayUnits = DisplayUnits.load(this);
         if (!state.hasLocation || state.fixAgeSeconds > STALE_FIX_SECONDS) {
-            return String.format(Locale.US, "Acquiring GPS • limit %.0f m", state.anchorRadiusMeters);
+            return "Acquiring GPS • limit " + displayUnits.format(state.anchorRadiusMeters);
         }
         if (Double.isFinite(state.anchorDistanceMeters)) {
-            return String.format(Locale.US, "%.1f m from reference • limit %.0f m",
-                    state.anchorDistanceMeters, state.anchorRadiusMeters);
+            return displayUnits.format(state.anchorDistanceMeters, 1)
+                    + " from reference • limit " + displayUnits.format(state.anchorRadiusMeters);
         }
-        return String.format(Locale.US, "Monitoring • limit %.0f m", state.anchorRadiusMeters);
+        return "Monitoring • limit " + displayUnits.format(state.anchorRadiusMeters);
     }
 
     private String streamingNotificationText(BridgeState state) {

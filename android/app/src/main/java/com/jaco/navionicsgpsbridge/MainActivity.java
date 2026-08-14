@@ -127,6 +127,7 @@ public final class MainActivity extends Activity implements
     private int readinessPreviousAlarmVolume = -1;
     private String readinessSirenError;
     private final List<Button> readinessStatusButtons = new ArrayList<>();
+    private final List<Button> displayUnitButtons = new ArrayList<>();
 
     private ScrollView pageScrollView;
     private TextView pageTitle;
@@ -519,6 +520,7 @@ public final class MainActivity extends Activity implements
     }
 
     private LinearLayout buildArmedAnchorDashboard() {
+        DisplayUnits displayUnits = DisplayUnits.load(this);
         LinearLayout dashboard = new LinearLayout(this);
         dashboard.setOrientation(LinearLayout.VERTICAL);
         LinearLayout plotCard = card();
@@ -569,7 +571,7 @@ public final class MainActivity extends Activity implements
         armedAnchorRadiusMinusButton.setContentDescription("Decrease alarm radius");
         armedRadiusControls.addView(armedAnchorRadiusMinusButton,
                 new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
-        armedAnchorRadiusValue = text("50 m", 15, R.color.nav_text);
+        armedAnchorRadiusValue = text(displayUnits.format(50.0), 15, R.color.nav_text);
         armedAnchorRadiusValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         armedAnchorRadiusValue.setGravity(Gravity.CENTER);
         armedRadiusControls.addView(armedAnchorRadiusValue,
@@ -695,6 +697,7 @@ public final class MainActivity extends Activity implements
     }
 
     private View buildAnchorAlarmCard() {
+        DisplayUnits displayUnits = DisplayUnits.load(this);
         LinearLayout card = card();
 
         LinearLayout statusLine = horizontal();
@@ -734,7 +737,7 @@ public final class MainActivity extends Activity implements
         LinearLayout radiusLine = horizontal();
         radiusLine.setGravity(Gravity.CENTER_VERTICAL);
         TextView radiusLabel = text("Alarm radius", 14, R.color.nav_secondary);
-        anchorRadiusValue = text("15 m", 15, R.color.nav_text);
+        anchorRadiusValue = text(displayUnits.format(15.0), 15, R.color.nav_text);
         anchorRadiusValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         anchorRadiusValue.setGravity(Gravity.CENTER);
         radiusLine.addView(radiusLabel,
@@ -751,7 +754,10 @@ public final class MainActivity extends Activity implements
         radiusLineParams.topMargin = dp(10);
         card.addView(radiusLine, radiusLineParams);
 
-        anchorRadiusHint = text("3–50 m range • 1 m steps", 12, R.color.nav_secondary);
+        anchorRadiusHint = text(displayUnits.range(
+                AnchorAlarm.Mode.SHORELINED.minimumRadiusMeters,
+                AnchorAlarm.Mode.SHORELINED.maximumRadiusMeters,
+                AnchorAlarm.Mode.SHORELINED.radiusStepMeters), 12, R.color.nav_secondary);
         anchorRadiusHint.setGravity(Gravity.END);
         card.addView(anchorRadiusHint, matchWrap());
 
@@ -1004,6 +1010,7 @@ public final class MainActivity extends Activity implements
     }
 
     private void render(BridgeState state) {
+        DisplayUnits displayUnits = DisplayUnits.load(this);
         boolean armedScreen = state.anchorAlarmArmed
                 || state.anchorSetupActive
                 || anchorSetupRequested;
@@ -1047,13 +1054,14 @@ public final class MainActivity extends Activity implements
         renderPowerSavingWarnings();
         renderShoreMonitorStatus(state);
         updateAnchorReadinessDialog();
+        updateDisplayUnitButtons();
 
         String visibleError = state.error != null ? state.error : permissionError;
         errorText.setText(visibleError == null ? "" : visibleError);
         errorText.setVisibility(visibleError == null ? View.GONE : View.VISIBLE);
         settingsButton.setVisibility(fineLocation ? View.GONE : View.VISIBLE);
         bridgeGpsMetric.setText(state.hasLocation && state.accuracyMeters >= 0.0
-                ? String.format(Locale.US, "±%.0f m", state.accuracyMeters) : "Waiting");
+                ? displayUnits.formatAccuracy(state.accuracyMeters) : "Waiting");
         bridgeClientMetric.setText(state.clientCount == 1
                 ? "1 client" : state.clientCount + " clients");
         updateSectionButtons(state);
@@ -1062,7 +1070,7 @@ public final class MainActivity extends Activity implements
         if (state.hasLocation) {
             positionValue.setText(String.format(Locale.US, "%.6f, %.6f", state.latitude, state.longitude));
             accuracyValue.setText(state.accuracyMeters >= 0.0
-                    ? String.format(Locale.US, "±%.0f m", state.accuracyMeters) : "—");
+                    ? displayUnits.formatAccuracy(state.accuracyMeters) : "—");
             fixAgeValue.setText(String.format(Locale.US, "%.1f s", state.fixAgeSeconds));
             speedValue.setText(state.speedMetersPerSecond >= 0.0
                     ? String.format(Locale.US, "%.1f kn", state.speedMetersPerSecond * 1.9438444924) : "—");
@@ -1290,6 +1298,7 @@ public final class MainActivity extends Activity implements
     }
 
     private void renderArmedAnchorDashboard(BridgeState state) {
+        DisplayUnits displayUnits = DisplayUnits.load(this);
         boolean setupActive = state.anchorSetupActive || anchorSetupRequested;
         if (state.anchorAlarmTriggered) {
             armedAnchorStatusTitle.setText("ANCHOR ALARM");
@@ -1309,34 +1318,34 @@ public final class MainActivity extends Activity implements
         }
         armedAnchorMode.setText(state.anchorMode.displayName);
         armedAnchorDistance.setText(Double.isFinite(state.anchorDistanceMeters)
-                ? String.format(Locale.US, "%.1f m", state.anchorDistanceMeters) : "—");
+                ? displayUnits.format(state.anchorDistanceMeters, 1) : "—");
         armedAnchorDistance.setTextColor(getColor(
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
-        armedAnchorDistanceLabel.setText(String.format(
-                Locale.US, "distance from reference • %.0f m limit", state.anchorRadiusMeters));
+        armedAnchorDistanceLabel.setText(
+                "distance from reference • " + displayUnits.format(state.anchorRadiusMeters)
+                        + " limit");
         boolean radiusAdjustable = state.anchorAlarmArmed
                 || (setupActive && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING);
         armedRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
         armedAnchorRadiusLabel.setText(state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 ? "Swing radius" : "Alarm radius");
-        armedAnchorRadiusValue.setText(String.format(
-                Locale.US, "%.0f m", state.anchorRadiusMeters));
+        armedAnchorRadiusValue.setText(displayUnits.format(state.anchorRadiusMeters));
         armedAnchorRadiusMinusButton.setEnabled(
                 state.anchorRadiusMeters > state.anchorMode.minimumRadiusMeters);
         armedAnchorRadiusPlusButton.setEnabled(
                 state.anchorRadiusMeters < state.anchorMode.maximumRadiusMeters);
+        anchorPlotView.setDisplayUnits(displayUnits);
         anchorPlotView.setState(state);
         String accuracy = state.hasLocation && state.accuracyMeters >= 0.0
-                ? String.format(Locale.US, " • GPS ±%.0f m", state.accuracyMeters) : "";
-        armedAnchorTrackSummary.setText(String.format(
-                Locale.US,
-                "%.0f m limit • %d plotted fixes%s",
-                state.anchorRadiusMeters,
-                state.anchorTrackPoints.size(),
-                accuracy));
+                ? " • GPS " + displayUnits.formatAccuracy(state.accuracyMeters) : "";
+        armedAnchorTrackSummary.setText(
+                displayUnits.format(state.anchorRadiusMeters) + " limit • "
+                        + state.anchorTrackPoints.size() + " plotted fixes" + accuracy);
         String gpsWarning = state.hasLocation && state.fixAgeSeconds <= STALE_FIX_SECONDS
                 ? AnchorGpsQuality.degradedWarning(
-                        state.accuracyMeters, state.anchorRadiusMeters)
+                        state.accuracyMeters,
+                        state.anchorRadiusMeters,
+                        displayUnits)
                 : null;
         armedGpsAccuracyWarningBody.setText(gpsWarning == null ? "" : gpsWarning);
         armedGpsAccuracyWarning.setVisibility(
@@ -1998,11 +2007,13 @@ public final class MainActivity extends Activity implements
             }
             if (latestState.accuracyMeters
                     > MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS) {
-                anchorActionMessage = String.format(
-                        Locale.US,
-                        "Improving GPS accuracy… currently ±%.0f m; need ±%.0f m.",
-                        latestState.accuracyMeters,
-                        MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS);
+                DisplayUnits displayUnits = DisplayUnits.load(this);
+                anchorActionMessage = "Improving GPS accuracy… currently "
+                        + displayUnits.formatAccuracy(latestState.accuracyMeters)
+                        + "; need "
+                        + displayUnits.formatAccuracy(
+                                MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS)
+                        + ".";
                 renderAnchorAlarm(latestState);
                 return;
             }
@@ -2479,7 +2490,39 @@ public final class MainActivity extends Activity implements
                 () -> showAnchorReadiness(false));
         readinessStatusButtons.add(readiness);
         card.addView(readiness, wrapWrap());
+        Button displayUnits = smallButton(
+                "Display units · " + DisplayUnits.load(this).preferenceDetail(),
+                this::showDisplayUnitPicker);
+        displayUnitButtons.add(displayUnits);
+        card.addView(displayUnits, wrapWrap());
         return card;
+    }
+
+    private void showDisplayUnitPicker() {
+        DisplayUnits.Preference[] preferences = DisplayUnits.Preference.values();
+        String[] labels = new String[preferences.length];
+        DisplayUnits.Preference selectedPreference = DisplayUnits.loadPreference(this);
+        int selectedIndex = 0;
+        for (int index = 0; index < preferences.length; index++) {
+            DisplayUnits candidate = new DisplayUnits(preferences[index], Locale.getDefault());
+            labels[index] = candidate.preferenceDetail();
+            if (preferences[index] == selectedPreference) selectedIndex = index;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Display units")
+                .setSingleChoiceItems(labels, selectedIndex, (dialog, position) -> {
+                    DisplayUnits.save(this, preferences[position]);
+                    dialog.dismiss();
+                    render(latestState);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void updateDisplayUnitButtons() {
+        String label = "Display units · " + DisplayUnits.load(this).preferenceDetail();
+        for (Button button : displayUnitButtons) button.setText(label);
     }
 
     private TextView safetyNote() {
@@ -2681,8 +2724,8 @@ public final class MainActivity extends Activity implements
                         + direction * selectedAnchorMode.radiusStepMeters);
         updateRadiusControls();
         if (armedAnchorRadiusValue != null) {
-            armedAnchorRadiusValue.setText(String.format(
-                    Locale.US, "%.0f m", selectedAnchorRadiusMeters));
+            armedAnchorRadiusValue.setText(
+                    DisplayUnits.load(this).format(selectedAnchorRadiusMeters));
         }
         if (binder != null) {
             binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
@@ -2690,10 +2733,9 @@ public final class MainActivity extends Activity implements
     }
 
     private void updateRadiusControls() {
-        anchorRadiusValue.setText(String.format(
-                Locale.US, "%.0f m", selectedAnchorRadiusMeters));
-        anchorRadiusHint.setText(String.format(
-                Locale.US, "%.0f–%.0f m range • %.0f m steps",
+        DisplayUnits displayUnits = DisplayUnits.load(this);
+        anchorRadiusValue.setText(displayUnits.format(selectedAnchorRadiusMeters));
+        anchorRadiusHint.setText(displayUnits.range(
                 selectedAnchorMode.minimumRadiusMeters,
                 selectedAnchorMode.maximumRadiusMeters,
                 selectedAnchorMode.radiusStepMeters));

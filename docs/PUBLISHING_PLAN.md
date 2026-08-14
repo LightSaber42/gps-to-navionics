@@ -42,7 +42,7 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Apply for Apple Critical Alerts, but do not block 2.0 on approval and do not claim Focus/mute override until approved.
 - [x] Preserve and integrate the in-progress degraded-GPS-precision warning currently present in the worktree.
 - [x] Add deterministic tests for entitlement evaluation, offline cache, expiry/revocation, and active-session continuity.
-- [ ] Add deterministic tests for metres/feet conversions and formatting.
+- [x] Add deterministic tests for metres/feet conversions and formatting.
 - [ ] Add purchase/restore/expiry physical-device test cases to the release checklist.
 
 ## 1. Release and dependency audit
@@ -125,16 +125,16 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Record the auxiliary-aid acknowledgement locally.
 - [x] Persist readiness completion locally and invalidate it if a required permission becomes unavailable.
 - [x] Add `Test alarm again` and readiness status to settings without cluttering the live dashboard.
-- [ ] Add units setting: System Default, Metres, Feet.
+- [x] Add units setting: System Default, Metres, Feet.
 
 ## 8. Units and formatting
 
-- [ ] Add shared unit conversion/formatting helpers in Swift and Java.
-- [ ] Default display units from device locale while allowing explicit override.
-- [ ] Convert anchor radius, current distance, GPS accuracy, plot labels, limit text, and step hints consistently.
-- [ ] Convert shore-monitor telemetry using the shore phone's display preference without altering protocol metres.
-- [ ] Keep coordinates, NMEA, persistence, geometry, history, and protocol data unchanged in canonical units.
-- [ ] Add boundary tests for rounding and mode-specific step sizes in feet.
+- [x] Add shared unit conversion/formatting helpers in Swift and Java.
+- [x] Default display units from device locale while allowing explicit override.
+- [x] Convert anchor radius, current distance, GPS accuracy, plot labels, limit text, and step hints consistently.
+- [x] Convert shore-monitor telemetry using the shore phone's display preference without altering protocol metres.
+- [x] Keep coordinates, NMEA, persistence, geometry, history, and protocol data unchanged in canonical units.
+- [x] Add boundary tests for rounding and mode-specific step sizes in feet.
 
 ## 9. Naming, localization, and visual identity
 
