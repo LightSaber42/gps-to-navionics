@@ -181,7 +181,7 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 metric("GPS", controller.accuracyDescription)
                 Divider().frame(height: 34)
-                metric("Navionics", controller.connectedClientCount == 1
+                metric("Clients", controller.connectedClientCount == 1
                     ? "1 client" : "\(controller.connectedClientCount) clients")
                 Divider().frame(height: 34)
                 metric("Port", String(controller.port), monospaced: true)
@@ -216,9 +216,10 @@ struct ContentView: View {
 
     private var connectionCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Navionics connection", systemImage: "network")
+            Label("NMEA Stream connection", systemImage: "network")
                 .font(.headline)
-            Text("Enter an address below and port " + String(controller.port) + " in Navionics.")
+            Text("Enter an address below and port " + String(controller.port)
+                + " in your marine navigation app.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             detailRow("Protocol", "TCP")
@@ -253,6 +254,11 @@ struct ContentView: View {
 
             Button("Refresh addresses", action: controller.refreshNetworkAddresses)
                 .font(.subheadline)
+
+            Text("Compatible with Navionics Boating via NMEA. This app is not affiliated "
+                + "with or endorsed by Navionics.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .cardStyle()
     }
@@ -262,13 +268,13 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 instruction(1, "Put the iPhone and iPad on the same Wi‑Fi network.")
                 instruction(2, "Start streaming and allow Precise Location and Local Network access.")
-                instruction(3, "In Navionics, open Menu → Connect a Device → Add Device.")
+                instruction(3, "In Navionics Boating, open Menu → Connect a Device → Add Device.")
                 instruction(4, "Choose TCP, then enter an address above and port \(controller.port).")
                 instruction(5, "Keep the iPhone powered during navigation.")
             }
             .padding(.top, 12)
         } label: {
-            Label("Setup in Navionics", systemImage: "list.number")
+            Label("Set up a navigation app", systemImage: "list.number")
                 .font(.headline)
         }
         .cardStyle()

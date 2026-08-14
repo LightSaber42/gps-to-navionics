@@ -228,8 +228,8 @@ final class BridgeController: NSObject, ObservableObject,
         guard fixAge(for: latestLocation) <= Self.staleFixSeconds else {
             return "GPS fix is stale"
         }
-        guard connectedClientCount > 0 else { return "Waiting for Navionics" }
-        return "Streaming to Navionics"
+        guard connectedClientCount > 0 else { return "Waiting for a navigation app" }
+        return "Streaming NMEA"
     }
 
     var statusColorName: String {

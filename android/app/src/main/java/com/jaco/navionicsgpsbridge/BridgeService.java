@@ -1336,7 +1336,7 @@ public final class BridgeService extends Service implements LocationListener,
                             ? anchorNotificationText(state)
                             : "Acquiring the anchor-drop position");
         } else {
-            builder.setContentTitle("GPS to Navionics is running")
+            builder.setContentTitle("NMEA Stream is running")
                     .setContentText(streamingNotificationText(state));
         }
 

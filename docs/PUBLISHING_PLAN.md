@@ -139,8 +139,8 @@ This document is the implementation and submission checklist for repositioning t
 ## 9. Naming, localization, and visual identity
 
 - [ ] Change store/display naming to Anchor Watch & GPS Bridge / Anchor Watch.
-- [ ] Change visible `Bridge` terminology to `NMEA Stream` where it refers to the free feature.
-- [ ] Remove Navionics from the product title and add a concise unaffiliated compatibility disclaimer where referenced.
+- [x] Change visible `Bridge` terminology to `NMEA Stream` where it refers to the free feature.
+- [x] Remove Navionics from the product title and add a concise unaffiliated compatibility disclaimer where referenced.
 - [ ] Move iOS user-facing copy into a String Catalog or `Localizable.strings` structure.
 - [ ] Move Android user-facing copy into `res/values/strings.xml`.
 - [ ] Design a distinctive anchor + GPS/radar visual system without third-party chart branding.
@@ -150,7 +150,7 @@ This document is the implementation and submission checklist for repositioning t
 
 ## 10. Store metadata, privacy, and legal artifacts
 
-- [ ] Set both platforms to version 2.0.0 and increment build/version codes.
+- [x] Set both platforms to version 2.0.0 and increment build/version codes.
 - [ ] Add an Apple privacy manifest if required by the final API/dependency audit.
 - [ ] Draft App Store privacy-label answers.
 - [ ] Draft Google Play Data Safety answers.

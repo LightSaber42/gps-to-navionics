@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">GPS to Navionics</string>
+    <string name="app_name">Anchor Watch</string>
     <string name="notification_channel_name">GPS and anchor monitoring</string>
     <string name="notification_channel_description">Keeps GPS streaming and an armed anchor watch running while the screen is locked.</string>
     <string name="anchor_alarm_channel_name">Anchor alarm alerts</string>

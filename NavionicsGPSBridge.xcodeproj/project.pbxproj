@@ -425,7 +425,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = NavionicsGPSBridge/NavionicsGPSBridge.entitlements;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 385U4527HY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -434,7 +434,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaco.navionicsgpsbridge;
 				PRODUCT_MODULE_NAME = NavionicsGPSBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -451,7 +451,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = NavionicsGPSBridge/NavionicsGPSBridge.entitlements;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 385U4527HY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -460,7 +460,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaco.navionicsgpsbridge;
 				PRODUCT_MODULE_NAME = NavionicsGPSBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";

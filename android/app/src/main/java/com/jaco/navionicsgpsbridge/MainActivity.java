@@ -386,7 +386,8 @@ public final class MainActivity extends Activity implements
         normalDashboard.addView(buildNetworkCard(), cardParams());
         LinearLayout setupContent = vertical();
         setupContent.addView(buildInstructionsCard(), cardParams());
-        normalDashboard.addView(buildDisclosureSection("Setup in Navionics", setupContent), cardParams());
+        normalDashboard.addView(
+                buildDisclosureSection("Set up a navigation app", setupContent), cardParams());
         LinearLayout bridgeDetails = vertical();
         bridgeDetails.addView(buildGpsCard(), cardParams());
         bridgeDetails.addView(buildDiagnosticsCard(), cardParams());
@@ -666,7 +667,7 @@ public final class MainActivity extends Activity implements
         metrics.setGravity(Gravity.CENTER);
         bridgeGpsMetric = addMetric(metrics, "GPS", "—");
         addMetricDivider(metrics);
-        bridgeClientMetric = addMetric(metrics, "Navionics", "0 clients");
+        bridgeClientMetric = addMetric(metrics, "Clients", "0 clients");
         addMetricDivider(metrics);
         TextView portMetric = addMetric(metrics, "Port", String.valueOf(BridgeService.PORT));
         portMetric.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
@@ -933,7 +934,7 @@ public final class MainActivity extends Activity implements
 
     private View buildNetworkCard() {
         LinearLayout card = card();
-        addCardHeader(card, "Navionics connection");
+        addCardHeader(card, "NMEA Stream connection");
         TextView summary = text(
                 "Use UDP for the simplest hotspot connection. TCP remains available as a fallback.",
                 14,
@@ -971,15 +972,25 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams refreshParams = wrapWrap();
         refreshParams.topMargin = dp(7);
         card.addView(refresh, refreshParams);
+        TextView compatibility = text(
+                "Compatible with Navionics Boating via NMEA. This app is not affiliated "
+                        + "with or endorsed by Navionics.",
+                12,
+                R.color.nav_secondary);
+        compatibility.setLineSpacing(0.0f, 1.12f);
+        LinearLayout.LayoutParams compatibilityParams = matchWrap();
+        compatibilityParams.topMargin = dp(10);
+        card.addView(compatibility, compatibilityParams);
         return card;
     }
 
     private View buildInstructionsCard() {
         LinearLayout card = card();
-        addCardHeader(card, "Connect in Navionics");
+        addCardHeader(card, "Set up a navigation app");
         addInstruction(card, 1, "Turn on this phone's hotspot and connect the iPad to it. Internet is not required.");
         addInstruction(card, 2, "Start streaming and allow Precise Location and notifications.");
-        addInstruction(card, 3, "In Navionics: Menu → Connect a Device → Add Device.");
+        addInstruction(card, 3,
+                "In Navionics Boating: Menu → Connect a Device → Add Device.");
         addInstruction(card, 4, "Choose UDP. Enter host 0.0.0.0 and port " + BridgeService.PORT + ".");
         addInstruction(card, 5, "Save the device. TCP remains available as a fallback using an address above.");
         addInstruction(card, 6, "Keep this phone powered during navigation.");
@@ -2200,8 +2211,8 @@ public final class MainActivity extends Activity implements
         if (state.clientCount == 0 && state.udpBroadcastTargetCount == 0) {
             return "Waiting for hotspot or Wi-Fi";
         }
-        if (state.clientCount == 0) return "Broadcasting GPS";
-        return "Streaming to Navionics";
+        if (state.clientCount == 0) return "Broadcasting NMEA";
+        return "Streaming NMEA";
     }
 
     private int statusColor(BridgeState state, boolean fineLocation) {

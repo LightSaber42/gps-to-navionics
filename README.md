@@ -1,8 +1,8 @@
-# GPS to Navionics
+# Anchor Watch & GPS Bridge
 
 Native iPhone and Android apps that provide two related functions:
 
-- Convert phone GPS fixes into NMEA 0183 for the Navionics Boating app on a Wi-Fi-only iPad.
+- Convert phone GPS fixes into NMEA 0183 for compatible marine navigation apps, including Navionics Boating on a Wi-Fi-only iPad.
 - Run an anchor watch on the authoritative phone left aboard and mirror its alarm state and plot to one read-only Android shore phone.
 
 ## Data paths
@@ -12,12 +12,13 @@ Native iPhone and Android apps that provide two related functions:
 `Boat anchor watch -> authenticated encrypted TCP port 11124 -> Android shore monitor`
 
 This app does not modify iPadOS Location Services and is not a system-wide GPS provider. The receiving app must explicitly support NMEA over TCP.
+Navionics is a third-party product; this app is not affiliated with or endorsed by Navionics.
 
 ## Run on iPhone
 
 1. Open `NavionicsGPSBridge.xcodeproj` in Xcode and run **NavionicsGPSBridge** on an iPhone.
 2. Put the iPhone and iPad on the same Wi-Fi network.
-3. Tap **Start Streaming** and grant Precise Location and Local Network access.
+3. Open **NMEA Stream**, tap **Start Streaming**, and grant Precise Location and Local Network access.
 4. In Navionics, open **Menu -> Connect a Device -> Add Device**.
 5. Choose TCP and enter an address shown by the bridge plus port `11123`.
 
@@ -30,7 +31,7 @@ The Android Studio project is in [`android`](android). It requires Android 8.0 o
 1. Open the `android` directory in Android Studio, or run `android/build-debug.sh` to build and verify a signed debug APK through the pinned Gradle wrapper. The first command-line build downloads the Gradle distribution and declared dependencies.
 2. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the Android phone.
 3. Put the Android phone and iPad on the same Wi-Fi network.
-4. Open **GPS to Navionics**, tap **Start Streaming**, and allow Precise Location and notifications.
+4. Open **Anchor Watch**, select **NMEA Stream**, tap **Start Streaming**, and allow Precise Location and notifications.
 5. In Navionics, open **Menu -> Connect a Device -> Add Device**. Choose UDP, enter host `0.0.0.0`, and port `11123`. TCP remains available using an address shown by the bridge plus port `11123`.
 
 Android streaming runs as a location foreground service with a persistent notification, so it continues while the screen is locked. Tap **Stop Streaming** in the app or notification when finished. Continuous GPS use is power intensive; keep the phone powered aboard.
@@ -44,7 +45,7 @@ The Android and iPhone apps can run an anchor watch independently of Navionics s
 - **Shorelined** records the boat's tied position when armed and watches a tight circular radius around it.
 - **Free swinging** records the anchor-drop point first, then watches a circular swing radius while the boat moves around the anchor.
 
-Choose a mode and radius in the app. In free-swinging mode, tap **Drop anchor here** while over the anchor, pay out the rode, then tap **Arm anchor alarm**. While armed, the default screen becomes a north-up plot showing the reference, recent GPS trail, current boat position and accuracy, and the alarm boundary. Drift distance is shown to 0.1 m. Background location keeps monitoring with the screen locked. A drift must remain definitely outside the radius for five seconds after allowing for reported GPS accuracy; loss of a GPS fix for 30 seconds also triggers the alarm.
+Choose a mode and radius in the app. In free-swinging mode, tap **Drop anchor here** while over the anchor, pay out the rode, then tap **Arm anchor alarm**. While armed, the default screen becomes a north-up plot showing the reference, recent GPS trail, current boat position and accuracy, and the alarm boundary. Distance is displayed in metres or feet according to the app setting while all calculations remain in metres. Background location keeps monitoring with the screen locked. A drift must remain definitely outside the radius for five seconds after allowing for reported GPS accuracy; loss of a GPS fix for 30 seconds also triggers the alarm.
 
 Android temporarily raises the alarm audio stream to its maximum, rings, and vibrates until silenced, then restores the previous alarm volume. iPhone plays a full-volume in-app siren and posts an immediate time-sensitive alert that repeats every minute until silenced or disarmed. iOS still respects the device's hardware volume because overriding it requires Apple's restricted Critical Alerts entitlement.
 

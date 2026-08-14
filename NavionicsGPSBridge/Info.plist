@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>GPS to Navionics</string>
+	<string>Anchor Watch</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,11 +25,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Navionics and your paired shore monitor connect to this iPhone over the local network.</string>
+	<string>Marine navigation apps and your paired shore monitor connect to this iPhone over the local network.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Your precise position powers Navionics streaming and the anchor drift alarm, including while the screen is locked.</string>
+	<string>Your precise position powers NMEA streaming and the anchor drift alarm, including while the screen is locked.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your precise position powers Navionics streaming and lets you set an anchor drift alarm.</string>
+	<string>Your precise position powers NMEA streaming and lets you set an anchor drift alarm.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

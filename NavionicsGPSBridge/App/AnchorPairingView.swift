@@ -18,7 +18,7 @@ struct AnchorPairingView: View {
                 VStack(spacing: 18) {
                     remoteAccessWarning
 
-                    Text("On the Android shore phone, scan this code with its Camera app. The GPS bridge opens automatically in read-only monitor mode.")
+                    Text("On the Android shore phone, scan this code with its Camera app. Anchor Watch opens automatically in read-only monitor mode.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
