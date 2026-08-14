@@ -62,21 +62,21 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Define stable product identifiers and document the App Store Connect/Play Console mapping.
 - [x] Implement a pure entitlement evaluator with store status, last validation time, seven-day offline policy, and revocation handling.
 - [x] Implement a session entitlement lease so an armed session remains enabled until disarm.
-- [ ] Gate anchor arming/setup/history behind Anchor Watch without hiding the anchor-first product introduction.
+- [x] Gate anchor arming/setup/history behind Anchor Watch without hiding the anchor-first product introduction.
 - [x] Gate pairing-code creation, sync-server availability, and new remote sessions behind Remote Anchor Watch.
 - [x] Preserve stored pairing when remote entitlement becomes inactive.
-- [ ] Add a debug-only, unmistakably labelled StoreKit/Play-license testing path that cannot ship enabled in Release.
+- [x] Add a debug-only, unmistakably labelled StoreKit/Play-license testing path that cannot ship enabled in Release.
 
 ## 3. iOS purchases and entitlement state
 
 - [x] Add StoreKit 2 product loading for the Anchor Watch non-consumable and monthly/annual Remote subscriptions.
 - [x] Observe transaction updates and current entitlements using verified StoreKit transactions.
 - [x] Finish and persist verified transactions appropriately.
-- [ ] Implement purchase, restore/sync, pending, cancelled, failure, refund/revocation, expiration, and billing-retry UI states.
+- [x] Implement purchase, restore/sync, pending, cancelled, failure, refund/revocation, expiration, and billing-retry UI states.
 - [x] Cache only the minimum entitlement metadata needed for safe offline evaluation.
-- [ ] Add a StoreKit configuration file for deterministic local purchase tests without changing Release behavior.
+- [x] Add a StoreKit configuration file for deterministic local purchase tests without changing Release behavior.
 - [ ] Add `Manage Subscription`, `Restore Purchases`, privacy, terms, and support links.
-- [ ] Ensure dynamic localized store prices are used; never hard-code checkout prices in UI.
+- [x] Ensure dynamic localized store prices are used; never hard-code checkout prices in UI.
 
 ## 4. Android purchases and entitlement state
 
@@ -87,33 +87,33 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Verify product IDs, purchase state, acknowledgement, cancellation, errors, and subscription changes.
 - [x] Acknowledge completed purchases within Google Play's required window.
 - [x] Persist only minimum entitlement/cache metadata and enforce the seven-day offline rule.
-- [ ] Add restore/refresh and Play subscription-management actions.
+- [x] Add restore/refresh and Play subscription-management actions.
 - [x] Ensure the free shore-monitor path never invokes or requires billing.
 
 ## 5. Anchor-first information architecture
 
-- [ ] Change the primary selector/order to **Anchor** first and **NMEA Stream** second on iOS and Android.
-- [ ] Open normal launches on Anchor for free and paid users.
-- [ ] Show free users a concise Anchor Watch product introduction, anchoring modes, safety behavior, tier comparison, and `Unlock Anchor Watch` action.
-- [ ] Avoid disabled operational controls in the free preview.
-- [ ] Send Anchor Watch owners directly to the operational anchor dashboard.
-- [ ] Show Remote Anchor Watch as a non-blocking add-on after successful Anchor Watch purchase.
-- [ ] Keep the remote upgrade available from the shore-monitor card.
-- [ ] Keep Android normal launches on Anchor; QR/deep links and monitor notifications open Shore Monitor directly.
-- [ ] Preserve a secondary route from the Android main app to an already-paired shore monitor.
+- [x] Change the primary selector/order to **Anchor** first and **NMEA Stream** second on iOS and Android.
+- [x] Open normal launches on Anchor for free and paid users.
+- [x] Show free users a concise Anchor Watch product introduction, anchoring modes, safety behavior, tier comparison, and `Unlock Anchor Watch` action.
+- [x] Avoid disabled operational controls in the free preview.
+- [x] Send Anchor Watch owners directly to the operational anchor dashboard.
+- [x] Show Remote Anchor Watch as a non-blocking add-on after successful Anchor Watch purchase.
+- [x] Keep the remote upgrade available from the shore-monitor card.
+- [x] Keep Android normal launches on Anchor; QR/deep links and monitor notifications open Shore Monitor directly.
+- [x] Preserve a secondary route from the Android main app to an already-paired shore monitor.
 - [ ] Apply the previously agreed cross-platform UI information contract: canonical anchor state wording, GPS accuracy, plotted fixes, reference details, diagnostics structure, and truthful connection wording.
 
 ## 6. Paywalls and purchase disclosures
 
 - [ ] Build an Anchor Watch lifetime paywall with benefits, dynamic price, restore action, safety limitation, privacy, support, and terms.
-- [ ] Build a separate Remote Anchor Watch paywall available only after tier 2 is owned.
-- [ ] Offer monthly and annual products together and highlight annual as best value.
-- [ ] Put `Requires a separate Android phone; iPhone and iPad cannot act as the shore monitor` directly above checkout.
-- [ ] Require the Android-companion acknowledgement before enabling subscription checkout.
-- [ ] Explain that LAN or user-provided Tailscale/equivalent VPN connectivity is required and no developer relay is provided.
-- [ ] Explain store-specific ownership before checkout.
-- [ ] Include auto-renewal, cancellation, billing period, and subscription-management disclosures required by each store.
-- [ ] Avoid claims that the app overrides iOS Focus/mute or can relaunch after force-quit/reboot.
+- [x] Build a separate Remote Anchor Watch paywall available only after tier 2 is owned.
+- [x] Offer monthly and annual products together and highlight annual as best value.
+- [x] Put `Requires a separate Android phone; iPhone and iPad cannot act as the shore monitor` directly above checkout.
+- [x] Require the Android-companion acknowledgement before enabling subscription checkout.
+- [x] Explain that LAN or user-provided Tailscale/equivalent VPN connectivity is required and no developer relay is provided.
+- [x] Explain store-specific ownership before checkout.
+- [x] Include auto-renewal, cancellation, billing period, and subscription-management disclosures required by each store.
+- [x] Avoid claims that the app overrides iOS Focus/mute or can relaunch after force-quit/reboot.
 
 ## 7. Readiness onboarding and settings
 
