@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import javax.crypto.Cipher;
@@ -134,7 +135,7 @@ final class AnchorPairingStore {
     }
 
     private HostConfiguration createHost() throws GeneralSecurityException {
-        String deviceId = UUID.randomUUID().toString().toLowerCase();
+        String deviceId = UUID.randomUUID().toString().toLowerCase(Locale.ROOT);
         byte[] key = AnchorSyncCrypto.randomBytes(AnchorSyncCrypto.PAIRING_KEY_BYTES);
         preferences.edit().putString(HOST_ID, deviceId).apply();
         writeSecret(HOST_SECRET, key);

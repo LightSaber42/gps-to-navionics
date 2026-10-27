@@ -24,7 +24,7 @@ final class AnchorPlotView extends View {
         super(context);
         displayUnits = DisplayUnits.load(context);
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        setContentDescription("Anchor drift plot. Waiting for GPS points.");
+        setContentDescription(context.getString(R.string.anchor_plot_waiting_accessibility));
     }
 
     void setDisplayUnits(DisplayUnits displayUnits) {
@@ -45,10 +45,23 @@ final class AnchorPlotView extends View {
         limitMeters = newLimitMeters;
         alarmTriggered = newAlarmTriggered;
         String distance = Double.isFinite(distanceMeters)
-                ? "Current drift " + displayUnits.format(distanceMeters, 1) + ". "
-                : "Waiting for a current GPS fix. ";
-        setContentDescription(distance + "Alarm limit " + displayUnits.format(limitMeters)
-                + ". " + points.size() + " GPS points plotted.");
+                ? getContext().getString(
+                        R.string.current_drift_accessibility,
+                        displayUnits.format(distanceMeters, 1))
+                : getContext().getString(R.string.waiting_current_gps_accessibility);
+        String plottedPoints = getResources().getQuantityString(
+                R.plurals.gps_points_plotted,
+                points.size(),
+                points.size());
+        String accuracy = points.isEmpty()
+                ? getContext().getString(R.string.unknown)
+                : displayUnits.formatAccuracy(points.get(points.size() - 1).accuracyMeters);
+        setContentDescription(getContext().getString(
+                R.string.anchor_plot_accessibility,
+                distance,
+                displayUnits.format(limitMeters),
+                accuracy,
+                plottedPoints));
         invalidate();
     }
 
@@ -191,11 +204,17 @@ final class AnchorPlotView extends View {
         paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         paint.setTextSize(dp(12));
         paint.setColor(color(R.color.nav_secondary));
-        canvas.drawText("N", centerX, dp(16), paint);
+        canvas.drawText(getContext().getString(R.string.cardinal_north), centerX, dp(16), paint);
         paint.setTextSize(dp(11));
         paint.setColor(color(alarmTriggered ? R.color.nav_error : R.color.nav_warning));
         float labelY = Math.max(dp(29), centerY - limitRadius - dp(5));
-        canvas.drawText(displayUnits.format(limitMeters) + " limit", centerX, labelY, paint);
+        canvas.drawText(
+                getContext().getString(
+                        R.string.plot_limit_label,
+                        displayUnits.format(limitMeters)),
+                centerX,
+                labelY,
+                paint);
     }
 
     private int withAlpha(int color, int alpha) {

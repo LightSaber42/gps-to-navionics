@@ -98,7 +98,7 @@ public final class MainActivity extends Activity implements
     private PlayBillingStore.Snapshot billingSnapshot;
     private boolean bound;
     private boolean powerSaveModeReceiverRegistered;
-    private BridgeState latestState = emptyState();
+    private BridgeState latestState;
     private String permissionError;
     private String anchorActionMessage;
     private int pendingPermissionAction;
@@ -128,6 +128,8 @@ public final class MainActivity extends Activity implements
     private String readinessSirenError;
     private final List<Button> readinessStatusButtons = new ArrayList<>();
     private final List<Button> displayUnitButtons = new ArrayList<>();
+    private final List<TextView> anchorReferenceValues = new ArrayList<>();
+    private final List<TextView> anchorDistanceValues = new ArrayList<>();
 
     private ScrollView pageScrollView;
     private TextView pageTitle;
@@ -249,6 +251,7 @@ public final class MainActivity extends Activity implements
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        latestState = emptyState(getString(R.string.stopped));
         getWindow().setStatusBarColor(getColor(R.color.nav_background));
         getWindow().setNavigationBarColor(getColor(R.color.nav_background));
         boolean darkMode = (getResources().getConfiguration().uiMode
@@ -364,7 +367,7 @@ public final class MainActivity extends Activity implements
             return insets;
         });
 
-        pageTitle = text("Anchor Watch", 28, R.color.nav_text);
+        pageTitle = text(getString(R.string.anchor_watch_title), 28, R.color.nav_text);
         pageTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         pageTitle.setPadding(dp(4), dp(10), 0, dp(12));
         content.addView(pageTitle, matchWrap());
@@ -372,7 +375,7 @@ public final class MainActivity extends Activity implements
 
         if (isDebuggableBuild()) {
             TextView debugBanner = text(
-                    "DEBUG BUILD · GOOGLE PLAY LICENSING IS TEST-ONLY",
+                    getString(R.string.debug_google_play_test_only),
                     12,
                     R.color.nav_warning);
             debugBanner.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -387,11 +390,14 @@ public final class MainActivity extends Activity implements
         LinearLayout setupContent = vertical();
         setupContent.addView(buildInstructionsCard(), cardParams());
         normalDashboard.addView(
-                buildDisclosureSection("Set up a navigation app", setupContent), cardParams());
+                buildDisclosureSection(getString(R.string.set_up_navigation_app), setupContent),
+                cardParams());
         LinearLayout bridgeDetails = vertical();
         bridgeDetails.addView(buildGpsCard(), cardParams());
         bridgeDetails.addView(buildDiagnosticsCard(), cardParams());
-        normalDashboard.addView(buildDisclosureSection("GPS and diagnostics", bridgeDetails), cardParams());
+        normalDashboard.addView(
+                buildDisclosureSection(getString(R.string.gps_and_diagnostics), bridgeDetails),
+                cardParams());
         normalDashboard.addView(safetyNote(), matchWrap());
         content.addView(normalDashboard, matchWrap());
 
@@ -403,7 +409,8 @@ public final class MainActivity extends Activity implements
         LinearLayout anchorDetails = vertical();
         anchorDetails.addView(buildAnchorDetailsCard(), cardParams());
         disarmedAnchorDashboard.addView(
-                buildDisclosureSection("Watch details", anchorDetails), cardParams());
+                buildDisclosureSection(getString(R.string.watch_details), anchorDetails),
+                cardParams());
         disarmedAnchorDashboard.addView(buildPairedAlarmCard(false), cardParams());
         anchorDashboard.addView(disarmedAnchorDashboard, matchWrap());
 
@@ -413,7 +420,8 @@ public final class MainActivity extends Activity implements
         LinearLayout armedDetails = vertical();
         armedDetails.addView(buildAnchorDetailsCard(), cardParams());
         armedAnchorContainer.addView(
-                buildDisclosureSection("Watch details", armedDetails), cardParams());
+                buildDisclosureSection(getString(R.string.watch_details), armedDetails),
+                cardParams());
         armedAnchorContainer.addView(buildPairedAlarmCard(true), cardParams());
         armedAnchorContainer.addView(safetyNote(), matchWrap());
         anchorDashboard.addView(armedAnchorContainer, matchWrap());
@@ -426,61 +434,58 @@ public final class MainActivity extends Activity implements
         LinearLayout preview = vertical();
 
         LinearLayout introduction = card();
-        TextView title = text("Anchor Watch", 28, R.color.nav_text);
+        TextView title = text(getString(R.string.anchor_watch_title), 28, R.color.nav_text);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         introduction.addView(title, matchWrap());
-        TextView summary = text(
-                "Turn the boat phone into a local drift and GPS-loss alarm. Choose a "
-                        + "shore-tied position or a free-swinging anchor circle, then keep "
-                        + "the phone aboard and powered.",
-                14,
-                R.color.nav_secondary);
+        TextView summary = text(getString(R.string.anchor_intro), 14, R.color.nav_secondary);
         summary.setLineSpacing(0.0f, 1.14f);
         LinearLayout.LayoutParams summaryParams = matchWrap();
         summaryParams.topMargin = dp(7);
         introduction.addView(summary, summaryParams);
         addPurchaseBenefit(
                 introduction,
-                "Two anchoring modes",
-                "Shorelined watches the tied boat position; Free swinging follows a marked anchor-drop point.");
+                getString(R.string.two_anchoring_modes),
+                getString(R.string.two_anchoring_modes_detail));
         addPurchaseBenefit(
                 introduction,
-                "Durable watch history",
-                "See the current trail, alarm boundary, GPS accuracy, and durable alarm events.");
+                getString(R.string.durable_watch_history),
+                getString(R.string.durable_watch_history_detail));
         addPurchaseBenefit(
                 introduction,
-                "Local safety alarms",
-                "Drift confirms for 5 seconds and GPS loss alarms after 30 seconds while armed.");
+                getString(R.string.local_safety_alarms),
+                getString(R.string.local_safety_alarms_detail));
         preview.addView(introduction, cardParams());
 
         LinearLayout tiers = card();
-        addCardHeader(tiers, "Choose your level");
-        addTierSummary(tiers, "NMEA Stream", "Free", "GPS-to-NMEA streaming stays free.");
+        addCardHeader(tiers, getString(R.string.choose_your_level));
+        addTierSummary(
+                tiers,
+                getString(R.string.nmea_stream_title),
+                getString(R.string.free_tier),
+                getString(R.string.nmea_free_detail));
         addDivider(tiers);
         anchorPurchasePrice = addTierSummary(
                 tiers,
-                "Anchor Watch",
-                "Price loading…",
-                "One-time purchase on this Google Play account.");
+                getString(R.string.anchor_watch_title),
+                getString(R.string.price_loading),
+                getString(R.string.anchor_one_time_detail));
         addDivider(tiers);
         addTierSummary(
                 tiers,
-                "Remote Anchor Watch",
-                "Optional add-on",
-                "Requires Anchor Watch, a separate Android shore phone, and a monthly or annual subscription.");
+                getString(R.string.remote_anchor_watch_title),
+                getString(R.string.optional_add_on),
+                getString(R.string.remote_tier_detail));
         preview.addView(tiers, cardParams());
 
         LinearLayout checkout = card();
-        addCardHeader(checkout, "Unlock Anchor Watch");
+        addCardHeader(checkout, getString(R.string.unlock_anchor_watch));
         TextView ownership = text(
-                "This is a one-time, platform-specific purchase. It restores only with "
-                        + "the same Google Play account and does not transfer to Apple.",
-                13,
-                R.color.nav_secondary);
+                getString(R.string.anchor_purchase_disclosure), 13, R.color.nav_secondary);
         ownership.setLineSpacing(0.0f, 1.12f);
         checkout.addView(ownership, matchWrap());
 
-        anchorPurchaseButton = actionButton("Loading Google Play price…", R.color.nav_blue);
+        anchorPurchaseButton = actionButton(
+                getString(R.string.loading_google_play_price), R.color.nav_blue);
         anchorPurchaseButton.setEnabled(false);
         anchorPurchaseButton.setOnClickListener(view -> billingStore.purchaseAnchorWatch(this));
         LinearLayout.LayoutParams purchaseParams = matchWrap();
@@ -494,25 +499,22 @@ public final class MainActivity extends Activity implements
         statusParams.topMargin = dp(8);
         checkout.addView(anchorPurchaseStatus, statusParams);
 
-        Button refresh = smallButton("Restore / refresh purchases", () -> billingStore.refresh());
+        Button refresh = smallButton(
+                getString(R.string.restore_refresh_purchases), () -> billingStore.refresh());
         LinearLayout.LayoutParams refreshParams = wrapWrap();
         refreshParams.topMargin = dp(6);
         checkout.addView(refresh, refreshParams);
         addReleasePolicyLinks(checkout);
 
         TextView safety = text(
-                "Anchor Watch is an auxiliary aid, not a certified navigation or safety "
-                        + "system. Test alarms before relying on it and keep an independent "
-                        + "anchor watch and navigation backup.",
-                12,
-                R.color.nav_secondary);
+                getString(R.string.anchor_auxiliary_warning), 12, R.color.nav_secondary);
         safety.setLineSpacing(0.0f, 1.12f);
         LinearLayout.LayoutParams safetyParams = matchWrap();
         safetyParams.topMargin = dp(8);
         checkout.addView(safety, safetyParams);
 
         Button shoreMonitor = smallButton(
-                "Use this phone as shore monitor",
+                getString(R.string.use_as_shore_monitor),
                 () -> startActivity(new Intent(this, ShoreMonitorActivity.class)));
         LinearLayout.LayoutParams shoreParams = wrapWrap();
         shoreParams.topMargin = dp(8);
@@ -547,7 +549,8 @@ public final class MainActivity extends Activity implements
         gpsWarningParams.topMargin = dp(12);
         plotCard.addView(armedGpsAccuracyWarning, gpsWarningParams);
 
-        armedAnchorPrimaryButton = actionButton("●  Arm anchor alarm", R.color.nav_blue);
+        armedAnchorPrimaryButton = actionButton(
+                getString(R.string.arm_anchor_alarm_button), R.color.nav_blue);
         armedAnchorPrimaryButton.setOnClickListener(view -> handleActiveAnchorPrimaryAction());
         LinearLayout.LayoutParams primaryParams = matchWrap();
         primaryParams.topMargin = dp(12);
@@ -560,17 +563,19 @@ public final class MainActivity extends Activity implements
         distanceParams.topMargin = dp(14);
         plotCard.addView(armedAnchorDistance, distanceParams);
 
-        armedAnchorDistanceLabel = text("distance from reference", 14, R.color.nav_secondary);
+        armedAnchorDistanceLabel = text(
+                getString(R.string.distance_from_reference), 14, R.color.nav_secondary);
         armedAnchorDistanceLabel.setGravity(Gravity.CENTER);
         plotCard.addView(armedAnchorDistanceLabel, matchWrap());
 
         armedRadiusControls = horizontal();
         armedRadiusControls.setGravity(Gravity.CENTER_VERTICAL);
-        armedAnchorRadiusLabel = text("Alarm radius", 14, R.color.nav_secondary);
+        armedAnchorRadiusLabel = text(getString(R.string.alarm_radius), 14, R.color.nav_secondary);
         armedRadiusControls.addView(armedAnchorRadiusLabel,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         armedAnchorRadiusMinusButton = radiusStepButton("−", -1.0);
-        armedAnchorRadiusMinusButton.setContentDescription("Decrease alarm radius");
+        armedAnchorRadiusMinusButton.setContentDescription(
+                getString(R.string.decrease_alarm_radius));
         armedRadiusControls.addView(armedAnchorRadiusMinusButton,
                 new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
         armedAnchorRadiusValue = text(displayUnits.format(50.0), 15, R.color.nav_text);
@@ -579,7 +584,8 @@ public final class MainActivity extends Activity implements
         armedRadiusControls.addView(armedAnchorRadiusValue,
                 new LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT));
         armedAnchorRadiusPlusButton = radiusStepButton("+", 1.0);
-        armedAnchorRadiusPlusButton.setContentDescription("Increase alarm radius");
+        armedAnchorRadiusPlusButton.setContentDescription(
+                getString(R.string.increase_alarm_radius));
         armedRadiusControls.addView(armedAnchorRadiusPlusButton,
                 new LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams radiusParams = matchWrap();
@@ -587,7 +593,7 @@ public final class MainActivity extends Activity implements
         plotCard.addView(armedRadiusControls, radiusParams);
 
         cancelAnchorSetupButton = outlinedDangerButton(
-                "✕  Cancel anchoring", this::cancelAnchorSetup);
+                getString(R.string.cancel_anchoring), this::cancelAnchorSetup);
         LinearLayout.LayoutParams cancelParams = matchWrap();
         cancelParams.topMargin = dp(12);
         plotCard.addView(cancelAnchorSetupButton, cancelParams);
@@ -598,11 +604,12 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(14), dp(14));
         dotParams.setMarginEnd(dp(10));
         statusLine.addView(armedAnchorStatusDot, dotParams);
-        armedAnchorStatusTitle = text("Anchor alarm armed", 20, R.color.nav_text);
+        armedAnchorStatusTitle = text(
+                getString(R.string.anchor_alarm_armed), 20, R.color.nav_text);
         armedAnchorStatusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         statusLine.addView(armedAnchorStatusTitle,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        armedAnchorMode = text("Shorelined", 12, R.color.nav_secondary);
+        armedAnchorMode = text(getString(R.string.shorelined), 12, R.color.nav_secondary);
         armedAnchorMode.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         statusLine.addView(armedAnchorMode, wrapWrap());
         LinearLayout.LayoutParams statusParams = matchWrap();
@@ -611,14 +618,15 @@ public final class MainActivity extends Activity implements
 
         LinearLayout legend = horizontal();
         legend.setGravity(Gravity.CENTER);
-        addLegendItem(legend, R.color.nav_blue_dark, "GPS trail");
-        addLegendItem(legend, R.color.nav_success, "Boat now");
-        addLegendItem(legend, R.color.nav_warning, "Alarm limit");
+        addLegendItem(legend, R.color.nav_blue_dark, getString(R.string.gps_trail));
+        addLegendItem(legend, R.color.nav_success, getString(R.string.boat_now));
+        addLegendItem(legend, R.color.nav_warning, getString(R.string.alarm_limit));
         LinearLayout.LayoutParams legendParams = matchWrap();
         legendParams.topMargin = dp(9);
         plotCard.addView(legend, legendParams);
 
-        armedAnchorTrackSummary = text("Waiting for plotted GPS fixes", 12, R.color.nav_secondary);
+        armedAnchorTrackSummary = text(
+                getString(R.string.waiting_plotted_fixes), 12, R.color.nav_secondary);
         armedAnchorTrackSummary.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams summaryParams = matchWrap();
         summaryParams.topMargin = dp(5);
@@ -631,17 +639,15 @@ public final class MainActivity extends Activity implements
         messageParams.topMargin = dp(11);
         plotCard.addView(armedAnchorMessage, messageParams);
 
-        armedAnchorSilenceButton = actionButton("Silence alarm", R.color.nav_warning);
+        armedAnchorSilenceButton = actionButton(
+                getString(R.string.silence_alarm), R.color.nav_warning);
         armedAnchorSilenceButton.setOnClickListener(view -> sendServiceAction(
                 BridgeService.ACTION_SILENCE_ANCHOR));
         LinearLayout.LayoutParams silenceParams = matchWrap();
         silenceParams.topMargin = dp(10);
         plotCard.addView(armedAnchorSilenceButton, silenceParams);
 
-        anchorPlotNote = text(
-                "North-up • focused on the alarm boundary, current position, and recent trail. "
-                        + "Isolated older GPS outliers do not shrink the plot.",
-                12, R.color.nav_secondary);
+        anchorPlotNote = text(getString(R.string.anchor_plot_note), 12, R.color.nav_secondary);
         anchorPlotNote.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams noteParams = matchWrap();
         noteParams.topMargin = dp(10);
@@ -659,18 +665,22 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(12), dp(12));
         dotParams.setMarginEnd(dp(10));
         line.addView(statusDot, dotParams);
-        statusTitle = text("Stopped", 17, R.color.nav_text);
+        statusTitle = text(getString(R.string.stopped), 17, R.color.nav_text);
         statusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         line.addView(statusTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         card.addView(line, matchWrap());
 
         LinearLayout metrics = horizontal();
         metrics.setGravity(Gravity.CENTER);
-        bridgeGpsMetric = addMetric(metrics, "GPS", "—");
+        bridgeGpsMetric = addMetric(metrics, getString(R.string.gps_acronym), "—");
         addMetricDivider(metrics);
-        bridgeClientMetric = addMetric(metrics, "Clients", "0 clients");
+        bridgeClientMetric = addMetric(
+                metrics,
+                getString(R.string.clients),
+                getResources().getQuantityString(R.plurals.tcp_clients, 0, 0));
         addMetricDivider(metrics);
-        TextView portMetric = addMetric(metrics, "Port", String.valueOf(BridgeService.PORT));
+        TextView portMetric = addMetric(
+                metrics, getString(R.string.port), String.valueOf(BridgeService.PORT));
         portMetric.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         LinearLayout.LayoutParams metricsParams = matchWrap();
         metricsParams.topMargin = dp(16);
@@ -691,7 +701,8 @@ public final class MainActivity extends Activity implements
         errorText.setPadding(0, dp(10), 0, 0);
         card.addView(errorText, matchWrap());
 
-        settingsButton = smallButton("Open Location Settings", this::openAppSettings);
+        settingsButton = smallButton(
+                getString(R.string.open_location_settings), this::openAppSettings);
         LinearLayout.LayoutParams settingsParams = wrapWrap();
         settingsParams.topMargin = dp(5);
         card.addView(settingsButton, settingsParams);
@@ -708,7 +719,8 @@ public final class MainActivity extends Activity implements
         LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(12), dp(12));
         dotParams.setMarginEnd(dp(10));
         statusLine.addView(anchorStatusDot, dotParams);
-        anchorStatusTitle = text("Anchor alarm ready", 17, R.color.nav_text);
+        anchorStatusTitle = text(
+                getString(R.string.anchor_alarm_ready), 17, R.color.nav_text);
         anchorStatusTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         statusLine.addView(anchorStatusTitle,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -726,8 +738,10 @@ public final class MainActivity extends Activity implements
         modesBackground.setColor(getColor(R.color.nav_surface_muted));
         modesBackground.setCornerRadius(dp(13));
         modes.setBackground(modesBackground);
-        shorelinedModeButton = modeButton("Shorelined", AnchorAlarm.Mode.SHORELINED);
-        freeSwingingModeButton = modeButton("Free swinging", AnchorAlarm.Mode.FREE_SWINGING);
+        shorelinedModeButton = modeButton(
+                getString(R.string.shorelined), AnchorAlarm.Mode.SHORELINED);
+        freeSwingingModeButton = modeButton(
+                getString(R.string.free_swinging), AnchorAlarm.Mode.FREE_SWINGING);
         modes.addView(shorelinedModeButton,
                 new LinearLayout.LayoutParams(0, dp(44), 1));
         modes.addView(freeSwingingModeButton,
@@ -738,7 +752,8 @@ public final class MainActivity extends Activity implements
 
         LinearLayout radiusLine = horizontal();
         radiusLine.setGravity(Gravity.CENTER_VERTICAL);
-        TextView radiusLabel = text("Alarm radius", 14, R.color.nav_secondary);
+        TextView radiusLabel = text(
+                getString(R.string.alarm_radius), 14, R.color.nav_secondary);
         anchorRadiusValue = text(displayUnits.format(15.0), 15, R.color.nav_text);
         anchorRadiusValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         anchorRadiusValue.setGravity(Gravity.CENTER);
@@ -768,13 +783,13 @@ public final class MainActivity extends Activity implements
         anchorStepOneDetail = addWorkflowStep(
                 freeSwingingWorkflow,
                 "1",
-                "Mark anchor position",
-                "Do this while the boat is over the anchor.");
+                getString(R.string.mark_anchor_position),
+                getString(R.string.mark_anchor_position_detail));
         addWorkflowStep(
                 freeSwingingWorkflow,
                 "2",
-                "Arm after paying out the rode",
-                "The watch uses the marked point as its centre.");
+                getString(R.string.arm_after_rode),
+                getString(R.string.arm_after_rode_detail));
         card.addView(freeSwingingWorkflow, matchWrap());
 
         anchorPowerSavingWarning = buildPowerSavingWarning();
@@ -782,13 +797,15 @@ public final class MainActivity extends Activity implements
         powerWarningParams.topMargin = dp(12);
         card.addView(anchorPowerSavingWarning, powerWarningParams);
 
-        anchorPrimaryButton = actionButton("Arm anchor alarm", R.color.nav_blue);
+        anchorPrimaryButton = actionButton(
+                getString(R.string.arm_anchor_alarm_button), R.color.nav_blue);
         anchorPrimaryButton.setOnClickListener(view -> toggleAnchorAlarm());
         LinearLayout.LayoutParams primaryParams = matchWrap();
         primaryParams.topMargin = dp(14);
         card.addView(anchorPrimaryButton, primaryParams);
 
-        silenceAnchorButton = actionButton("Silence alarm", R.color.nav_warning);
+        silenceAnchorButton = actionButton(
+                getString(R.string.silence_alarm), R.color.nav_warning);
         silenceAnchorButton.setOnClickListener(view -> sendServiceAction(
                 BridgeService.ACTION_SILENCE_ANCHOR));
         LinearLayout.LayoutParams silenceParams = matchWrap();
@@ -805,68 +822,62 @@ public final class MainActivity extends Activity implements
 
     private View buildGpsCard() {
         LinearLayout card = card();
-        addCardHeader(card, "GPS fix");
-        permissionValue = addDetailRow(card, "Permission", false);
-        positionValue = addDetailRow(card, "Position", true);
-        accuracyValue = addDetailRow(card, "Accuracy", false);
-        fixAgeValue = addDetailRow(card, "Fix age", false);
-        speedValue = addDetailRow(card, "Speed", false);
-        courseValue = addDetailRow(card, "Course over ground", false);
+        addCardHeader(card, getString(R.string.gps_fix));
+        permissionValue = addDetailRow(card, getString(R.string.permission), false);
+        positionValue = addDetailRow(card, getString(R.string.position), true);
+        accuracyValue = addDetailRow(card, getString(R.string.accuracy), false);
+        fixAgeValue = addDetailRow(card, getString(R.string.fix_age), false);
+        speedValue = addDetailRow(card, getString(R.string.speed), false);
+        courseValue = addDetailRow(card, getString(R.string.course_over_ground), false);
         return card;
     }
 
     private View buildPairedAlarmCard(boolean armedCard) {
         LinearLayout card = card();
-        addCardHeader(card, "Optional shore monitor");
+        addCardHeader(card, getString(R.string.optional_shore_monitor));
         TextView description = text(
-                "Add a separate Android phone for read-only remote status, durable alarm "
-                        + "replay, and connection-loss alerts.",
-                13,
-                R.color.nav_secondary);
+                getString(R.string.shore_monitor_detail), 13, R.color.nav_secondary);
         description.setLineSpacing(0.0f, 1.12f);
         card.addView(description, matchWrap());
-        TextView status = addDetailRow(card, "Status", false);
+        TextView status = addDetailRow(card, getString(R.string.status), false);
         if (armedCard) armedShoreMonitorValue = status;
         else normalShoreMonitorValue = status;
 
-        Button pair = smallButton("Set up or view pairing code", () -> startActivity(
-                new Intent(this, AnchorPairingActivity.class)));
+        Button pair = smallButton(getString(R.string.set_up_pairing_code), () ->
+                startActivity(new Intent(this, AnchorPairingActivity.class)));
         LinearLayout.LayoutParams pairParams = wrapWrap();
         pairParams.topMargin = dp(10);
         card.addView(pair, pairParams);
 
         LinearLayout remoteOffer = vertical();
         addDivider(remoteOffer);
-        TextView offerTitle = text("Add Remote Anchor Watch", 16, R.color.nav_text);
+        TextView offerTitle = text(
+                getString(R.string.add_remote_anchor_watch), 16, R.color.nav_text);
         offerTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         remoteOffer.addView(offerTitle, matchWrap());
         TextView requirement = text(
-                "Requires a separate Android phone; an iPhone or iPad cannot act as the shore monitor.",
-                14,
-                R.color.nav_text);
+                getString(R.string.separate_android_required), 14, R.color.nav_text);
         requirement.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         LinearLayout.LayoutParams requirementParams = matchWrap();
         requirementParams.topMargin = dp(8);
         remoteOffer.addView(requirement, requirementParams);
         TextView connectivity = text(
-                "Both phones must be reachable on the same LAN or through your own "
-                        + "Tailscale/equivalent VPN. The app provides no developer-operated internet relay.",
-                12,
-                R.color.nav_secondary);
+                getString(R.string.direct_transport_detail), 12, R.color.nav_secondary);
         connectivity.setLineSpacing(0.0f, 1.12f);
         LinearLayout.LayoutParams connectivityParams = matchWrap();
         connectivityParams.topMargin = dp(6);
         remoteOffer.addView(connectivity, connectivityParams);
 
         CheckBox companionConfirmation = new CheckBox(this);
-        companionConfirmation.setText("I have a separate Android phone for shore monitoring");
+        companionConfirmation.setText(R.string.android_companion_confirmation);
         companionConfirmation.setTextSize(13);
         companionConfirmation.setTextColor(getColor(R.color.nav_text));
         LinearLayout.LayoutParams confirmationParams = matchWrap();
         confirmationParams.topMargin = dp(8);
         remoteOffer.addView(companionConfirmation, confirmationParams);
 
-        Button monthly = actionButton("Monthly · Price loading…", R.color.nav_secondary);
+        Button monthly = actionButton(
+                getString(R.string.monthly_price_loading), R.color.nav_secondary);
         monthly.setEnabled(false);
         monthly.setOnClickListener(view -> billingStore.purchaseRemote(
                 this,
@@ -876,7 +887,8 @@ public final class MainActivity extends Activity implements
         monthlyParams.topMargin = dp(8);
         remoteOffer.addView(monthly, monthlyParams);
 
-        Button annual = actionButton("Annual · Best value · Price loading…", R.color.nav_blue);
+        Button annual = actionButton(
+                getString(R.string.annual_price_loading), R.color.nav_blue);
         annual.setEnabled(false);
         annual.setOnClickListener(view -> billingStore.purchaseRemote(
                 this,
@@ -894,9 +906,7 @@ public final class MainActivity extends Activity implements
         remoteOffer.addView(purchaseStatus, statusParams);
 
         TextView renewal = text(
-                "Subscriptions auto-renew for the selected billing period unless cancelled. "
-                        + "Manage or cancel through Google Play. Access is platform-specific "
-                        + "and does not transfer to Apple.",
+                getString(R.string.remote_subscription_disclosure),
                 12,
                 R.color.nav_secondary);
         renewal.setLineSpacing(0.0f, 1.12f);
@@ -904,16 +914,17 @@ public final class MainActivity extends Activity implements
         renewalParams.topMargin = dp(8);
         remoteOffer.addView(renewal, renewalParams);
 
-        Button refresh = smallButton("Restore / refresh purchases", () -> billingStore.refresh());
+        Button refresh = smallButton(
+                getString(R.string.restore_refresh_purchases), () -> billingStore.refresh());
         remoteOffer.addView(refresh, wrapWrap());
 
         Button manage = smallButton(
-                "Manage Google Play subscription",
+                getString(R.string.manage_google_play_subscription),
                 this::openPlaySubscriptionManagement);
         card.addView(manage, wrapWrap());
 
-        Button monitor = smallButton("Use this phone as shore monitor", () -> startActivity(
-                new Intent(this, ShoreMonitorActivity.class)));
+        Button monitor = smallButton(getString(R.string.use_as_shore_monitor), () ->
+                startActivity(new Intent(this, ShoreMonitorActivity.class)));
         LinearLayout.LayoutParams monitorParams = wrapWrap();
         monitorParams.topMargin = dp(6);
         card.addView(monitor, monitorParams);
@@ -936,16 +947,14 @@ public final class MainActivity extends Activity implements
 
     private View buildNetworkCard() {
         LinearLayout card = card();
-        addCardHeader(card, "NMEA Stream connection");
+        addCardHeader(card, getString(R.string.nmea_stream_connection));
         TextView summary = text(
-                "Use UDP for the simplest hotspot connection. TCP remains available as a fallback.",
-                14,
-                R.color.nav_secondary);
+                getString(R.string.nmea_connection_detail), 14, R.color.nav_secondary);
         summary.setLineSpacing(0.0f, 1.12f);
         card.addView(summary, matchWrap());
-        TextView protocolValue = addDetailRow(card, "Protocol", false);
-        protocolValue.setText("UDP recommended · TCP fallback");
-        TextView portValue = addDetailRow(card, "Port", true);
+        TextView protocolValue = addDetailRow(card, getString(R.string.protocol), false);
+        protocolValue.setText(R.string.udp_recommended_tcp_fallback);
+        TextView portValue = addDetailRow(card, getString(R.string.port), true);
         portValue.setText(String.valueOf(BridgeService.PORT));
 
         View divider = new View(this);
@@ -957,9 +966,7 @@ public final class MainActivity extends Activity implements
         card.addView(divider, dividerParams);
 
         TextView hint = text(
-                "TCP fallback addresses:",
-                14,
-                R.color.nav_secondary);
+                getString(R.string.tcp_fallback_addresses), 14, R.color.nav_secondary);
         card.addView(hint, matchWrap());
 
         addressesContainer = new LinearLayout(this);
@@ -968,17 +975,14 @@ public final class MainActivity extends Activity implements
         addressesParams.topMargin = dp(6);
         card.addView(addressesContainer, addressesParams);
 
-        Button refresh = smallButton("Refresh addresses", () -> {
+        Button refresh = smallButton(getString(R.string.refresh_addresses), () -> {
             if (binder != null) binder.refreshNetworkAddresses();
         });
         LinearLayout.LayoutParams refreshParams = wrapWrap();
         refreshParams.topMargin = dp(7);
         card.addView(refresh, refreshParams);
         TextView compatibility = text(
-                "Compatible with Navionics Boating via NMEA. This app is not affiliated "
-                        + "with or endorsed by Navionics.",
-                12,
-                R.color.nav_secondary);
+                getString(R.string.navionics_compatibility), 12, R.color.nav_secondary);
         compatibility.setLineSpacing(0.0f, 1.12f);
         LinearLayout.LayoutParams compatibilityParams = matchWrap();
         compatibilityParams.topMargin = dp(10);
@@ -988,24 +992,27 @@ public final class MainActivity extends Activity implements
 
     private View buildInstructionsCard() {
         LinearLayout card = card();
-        addCardHeader(card, "Set up a navigation app");
-        addInstruction(card, 1, "Turn on this phone's hotspot and connect the iPad to it. Internet is not required.");
-        addInstruction(card, 2, "Start streaming and allow Precise Location and notifications.");
-        addInstruction(card, 3,
-                "In Navionics Boating: Menu → Connect a Device → Add Device.");
-        addInstruction(card, 4, "Choose UDP. Enter host 0.0.0.0 and port " + BridgeService.PORT + ".");
-        addInstruction(card, 5, "Save the device. TCP remains available as a fallback using an address above.");
-        addInstruction(card, 6, "Keep this phone powered during navigation.");
+        addCardHeader(card, getString(R.string.set_up_navigation_app));
+        addInstruction(card, 1, getString(R.string.navigation_instruction_hotspot));
+        addInstruction(card, 2, getString(R.string.navigation_instruction_permissions));
+        addInstruction(card, 3, getString(R.string.navigation_instruction_navionics));
+        addInstruction(
+                card,
+                4,
+                getString(R.string.navigation_instruction_udp, BridgeService.PORT));
+        addInstruction(card, 5, getString(R.string.navigation_instruction_save));
+        addInstruction(card, 6, getString(R.string.navigation_instruction_power));
         return card;
     }
 
     private View buildDiagnosticsCard() {
         LinearLayout card = card();
-        addCardHeader(card, "Network and NMEA");
-        clientsValue = addDetailRow(card, "TCP clients", false);
-        udpTargetsValue = addDetailRow(card, "UDP networks", false);
-        serverValue = addDetailRow(card, "TCP server", false);
-        TextView lastTransmission = text("Last NMEA transmission", 14, R.color.nav_text);
+        addCardHeader(card, getString(R.string.network_and_nmea));
+        clientsValue = addDetailRow(card, getString(R.string.tcp_clients_label), false);
+        udpTargetsValue = addDetailRow(card, getString(R.string.udp_networks_label), false);
+        serverValue = addDetailRow(card, getString(R.string.tcp_server_label), false);
+        TextView lastTransmission = text(
+                getString(R.string.last_nmea_transmission), 14, R.color.nav_text);
         lastTransmission.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         LinearLayout.LayoutParams transmissionParams = matchWrap();
         transmissionParams.topMargin = dp(14);
@@ -1013,7 +1020,8 @@ public final class MainActivity extends Activity implements
         card.addView(lastTransmission, transmissionParams);
         HorizontalScrollView horizontalScroll = new HorizontalScrollView(this);
         horizontalScroll.setFillViewport(true);
-        sentencesValue = text("Sentences appear here after the first GPS fix.", 12, R.color.nav_secondary);
+        sentencesValue = text(
+                getString(R.string.sentences_placeholder), 12, R.color.nav_secondary);
         sentencesValue.setTypeface(Typeface.MONOSPACE);
         sentencesValue.setTextIsSelectable(true);
         horizontalScroll.addView(sentencesValue, new HorizontalScrollView.LayoutParams(
@@ -1060,10 +1068,12 @@ public final class MainActivity extends Activity implements
         setCircleColor(statusDot, statusColor(state, fineLocation));
         statusDot.setContentDescription(statusTitle.getText());
 
-        streamButton.setText(active ? "■  Stop streaming" : "●  Start streaming");
+        streamButton.setText(active
+                ? R.string.stop_streaming_button : R.string.start_streaming_button);
         styleActionButton(streamButton, active ? R.color.nav_error : R.color.nav_blue);
         renderAnchorAlarm(state);
         renderArmedAnchorDashboard(state);
+        renderAnchorDetails(state, displayUnits);
         renderPowerSavingWarnings();
         renderShoreMonitorStatus(state);
         updateAnchorReadinessDialog();
@@ -1074,9 +1084,12 @@ public final class MainActivity extends Activity implements
         errorText.setVisibility(visibleError == null ? View.GONE : View.VISIBLE);
         settingsButton.setVisibility(fineLocation ? View.GONE : View.VISIBLE);
         bridgeGpsMetric.setText(state.hasLocation && state.accuracyMeters >= 0.0
-                ? displayUnits.formatAccuracy(state.accuracyMeters) : "Waiting");
-        bridgeClientMetric.setText(state.clientCount == 1
-                ? "1 client" : state.clientCount + " clients");
+                ? displayUnits.formatAccuracy(state.accuracyMeters)
+                : getString(R.string.waiting));
+        bridgeClientMetric.setText(getResources().getQuantityString(
+                R.plurals.tcp_clients,
+                state.clientCount,
+                state.clientCount));
         updateSectionButtons(state);
 
         permissionValue.setText(permissionDescription());
@@ -1084,11 +1097,14 @@ public final class MainActivity extends Activity implements
             positionValue.setText(String.format(Locale.US, "%.6f, %.6f", state.latitude, state.longitude));
             accuracyValue.setText(state.accuracyMeters >= 0.0
                     ? displayUnits.formatAccuracy(state.accuracyMeters) : "—");
-            fixAgeValue.setText(String.format(Locale.US, "%.1f s", state.fixAgeSeconds));
+            fixAgeValue.setText(getString(R.string.seconds_value, state.fixAgeSeconds));
             speedValue.setText(state.speedMetersPerSecond >= 0.0
-                    ? String.format(Locale.US, "%.1f kn", state.speedMetersPerSecond * 1.9438444924) : "—");
+                    ? getString(
+                            R.string.knots_value,
+                            state.speedMetersPerSecond * 1.9438444924)
+                    : "—");
             courseValue.setText(state.courseDegrees >= 0.0
-                    ? String.format(Locale.US, "%.1f°", state.courseDegrees) : "—");
+                    ? getString(R.string.degrees_value, state.courseDegrees) : "—");
         } else {
             positionValue.setText("—");
             accuracyValue.setText("—");
@@ -1099,13 +1115,16 @@ public final class MainActivity extends Activity implements
 
         clientsValue.setText(String.valueOf(state.clientCount));
         udpTargetsValue.setText(state.udpBroadcastTargetCount == 0
-                ? "Waiting for hotspot"
-                : state.udpBroadcastTargetCount + " active");
+                ? getString(R.string.waiting_for_hotspot)
+                : getResources().getQuantityString(
+                        R.plurals.active_udp_networks,
+                        state.udpBroadcastTargetCount,
+                        state.udpBroadcastTargetCount));
         serverValue.setText(state.listenerDescription);
         renderAddresses(state.networkAddresses);
 
         if (state.lastSentences.isEmpty()) {
-            sentencesValue.setText("Sentences appear here after the first GPS fix.");
+            sentencesValue.setText(R.string.sentences_placeholder);
             sentencesValue.setTextColor(getColor(R.color.nav_secondary));
         } else {
             sentencesValue.setText(state.lastSentences);
@@ -1129,11 +1148,12 @@ public final class MainActivity extends Activity implements
                 && (billingSnapshot.actionState == PlayBillingStore.ActionState.CONNECTING
                 || billingSnapshot.actionState == PlayBillingStore.ActionState.PURCHASING);
 
-        String anchorPrice = anchorOffer == null ? "Price loading…" : anchorOffer.formattedPrice;
+        String anchorPrice = anchorOffer == null
+                ? getString(R.string.price_loading) : anchorOffer.formattedPrice;
         anchorPurchasePrice.setText(anchorPrice);
         anchorPurchaseButton.setText(anchorOffer == null
-                ? "Loading Google Play price…"
-                : "Unlock Anchor Watch · " + anchorOffer.formattedPrice);
+                ? getString(R.string.loading_google_play_price)
+                : getString(R.string.unlock_anchor_watch_price, anchorOffer.formattedPrice));
         anchorPurchaseButton.setEnabled(anchorOffer != null && !billingBusy);
 
         String billingMessage = billingStatusMessage(false);
@@ -1155,11 +1175,11 @@ public final class MainActivity extends Activity implements
             PlayBillingStore.ProductOffer annualOffer = billingSnapshot == null
                     ? null : billingSnapshot.remoteAnnualOffer;
             views.monthlyButton.setText(monthlyOffer == null
-                    ? "Monthly · Price loading…"
-                    : "Monthly · " + monthlyOffer.formattedPrice);
+                    ? getString(R.string.monthly_price_loading)
+                    : getString(R.string.monthly_price, monthlyOffer.formattedPrice));
             views.annualButton.setText(annualOffer == null
-                    ? "Annual · Best value · Price loading…"
-                    : "Annual · Best value · " + annualOffer.formattedPrice);
+                    ? getString(R.string.annual_price_loading)
+                    : getString(R.string.annual_price, annualOffer.formattedPrice));
             boolean checkoutConfirmed = views.companionConfirmation.isChecked();
             views.monthlyButton.setEnabled(
                     monthlyOffer != null && checkoutConfirmed && !billingBusy);
@@ -1176,25 +1196,25 @@ public final class MainActivity extends Activity implements
     }
 
     private String billingStatusMessage(boolean remoteActive) {
-        if (billingSnapshot == null) return "Connecting to Google Play…";
+        if (billingSnapshot == null) return getString(R.string.connecting_google_play);
         switch (billingSnapshot.actionState) {
             case CONNECTING:
-                return "Connecting to Google Play…";
+                return getString(R.string.connecting_google_play);
             case PURCHASING:
-                return "Waiting for Google Play…";
+                return getString(R.string.waiting_google_play);
             case PENDING:
                 return billingSnapshot.message == null
-                        ? "Payment is pending. Access unlocks after Google Play confirms it."
+                        ? getString(R.string.purchase_pending)
                         : billingSnapshot.message;
             case CANCELLED:
-                return "Purchase cancelled. Nothing was charged.";
+                return getString(R.string.purchase_cancelled);
             case ERROR:
                 return billingSnapshot.message == null
-                        ? "Google Play could not complete the request."
+                        ? getString(R.string.google_play_request_failed)
                         : billingSnapshot.message;
             case IDLE:
             default:
-                return remoteActive ? "Remote subscription active" : null;
+                return remoteActive ? getString(R.string.remote_subscription_active) : null;
         }
     }
 
@@ -1225,32 +1245,29 @@ public final class MainActivity extends Activity implements
         boolean setupActive = state.anchorSetupActive || anchorSetupRequested;
         boolean triggered = state.anchorAlarmTriggered;
         if (triggered) {
-            anchorStatusTitle.setText("ANCHOR ALARM");
+            anchorStatusTitle.setText(R.string.anchor_alarm);
             setCircleColor(anchorStatusDot, getColor(R.color.nav_error));
         } else if (state.anchorAlarmSilenced) {
-            anchorStatusTitle.setText("Alarm silenced • still monitoring");
+            anchorStatusTitle.setText(R.string.alarm_silenced_still_monitoring);
             setCircleColor(anchorStatusDot, getColor(R.color.nav_warning));
         } else if (armed) {
-            anchorStatusTitle.setText("Armed • " + state.anchorMode.displayName);
+            anchorStatusTitle.setText(getString(
+                    R.string.armed_mode, anchorModeDisplayName(state.anchorMode)));
             setCircleColor(anchorStatusDot, getColor(R.color.nav_success));
         } else if (state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !state.hasAnchorReference) {
-            anchorStatusTitle.setText("Record the anchor position");
+            anchorStatusTitle.setText(R.string.record_anchor_position);
             setCircleColor(anchorStatusDot, getColor(R.color.nav_blue));
         } else {
-            anchorStatusTitle.setText("Anchor alarm ready");
+            anchorStatusTitle.setText(R.string.anchor_alarm_ready);
             setCircleColor(anchorStatusDot, getColor(R.color.nav_blue));
         }
         anchorStatusDot.setContentDescription(anchorStatusTitle.getText());
 
         if (state.anchorMode == AnchorAlarm.Mode.SHORELINED) {
-            anchorDescription.setText(
-                    "For a bow anchor with the stern tied ashore. Arming records the boat's current "
-                            + "tied position and watches a tight circle around it.");
+            anchorDescription.setText(R.string.shorelined_description);
         } else {
-            anchorDescription.setText(
-                    "For a boat free to swing. Tap Drop anchor at the anchor-drop point, "
-                            + "then arm after paying out the rode.");
+            anchorDescription.setText(R.string.free_swinging_description);
         }
 
         shorelinedModeButton.setEnabled(!armed && !setupActive);
@@ -1260,23 +1277,23 @@ public final class MainActivity extends Activity implements
         freeSwingingWorkflow.setVisibility(
                 state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING ? View.VISIBLE : View.GONE);
         anchorStepOneDetail.setText(state.hasAnchorReference
-                ? "Position recorded. Continue to step 2."
+                ? getString(R.string.position_recorded_continue)
                 : pendingPermissionAction == PENDING_MARK_ANCHOR
-                ? "Waiting for a new, accurate GPS position."
-                : "Do this while the boat is over the anchor.");
+                ? getString(R.string.waiting_accurate_gps)
+                : getString(R.string.mark_anchor_position_detail));
 
         if (armed) {
-            anchorPrimaryButton.setText("■  Disarm anchor watch");
+            anchorPrimaryButton.setText(R.string.disarm_anchor_watch_button);
             styleActionButton(anchorPrimaryButton, R.color.nav_error);
         } else if (requiresNewAnchorReferenceFix(pendingPermissionAction)) {
-            anchorPrimaryButton.setText("⌖  Acquiring GPS position…");
+            anchorPrimaryButton.setText(R.string.acquiring_gps_position_button);
             styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         } else if (state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !state.hasAnchorReference) {
-            anchorPrimaryButton.setText("⚓  Drop anchor");
+            anchorPrimaryButton.setText(R.string.drop_anchor_button);
             styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         } else {
-            anchorPrimaryButton.setText("●  Arm anchor alarm");
+            anchorPrimaryButton.setText(R.string.arm_anchor_alarm_button);
             styleActionButton(anchorPrimaryButton, R.color.nav_blue);
         }
         silenceAnchorButton.setVisibility(triggered ? View.VISIBLE : View.GONE);
@@ -1291,13 +1308,13 @@ public final class MainActivity extends Activity implements
         String value;
         int color;
         if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
-            value = "Connected · Sound ready";
+            value = getString(R.string.connected_sound_ready);
             color = R.color.nav_success;
         } else if (state.shoreMonitorConnected) {
-            value = state.anchorAlarmArmed ? "Connected · Setup needed" : "Connected";
-            color = state.anchorAlarmArmed ? R.color.nav_warning : R.color.nav_secondary;
+            value = getString(R.string.connected_setup_needed);
+            color = R.color.nav_warning;
         } else {
-            value = "Not paired · Optional";
+            value = getString(R.string.no_shore_monitor_connected);
             color = R.color.nav_secondary;
         }
         if (normalShoreMonitorValue != null) {
@@ -1314,34 +1331,35 @@ public final class MainActivity extends Activity implements
         DisplayUnits displayUnits = DisplayUnits.load(this);
         boolean setupActive = state.anchorSetupActive || anchorSetupRequested;
         if (state.anchorAlarmTriggered) {
-            armedAnchorStatusTitle.setText("ANCHOR ALARM");
+            armedAnchorStatusTitle.setText(R.string.anchor_alarm);
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_error));
         } else if (state.anchorAlarmSilenced) {
-            armedAnchorStatusTitle.setText("Alarm silenced • monitoring");
+            armedAnchorStatusTitle.setText(R.string.alarm_silenced_still_monitoring);
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_warning));
         } else if (setupActive && !state.hasAnchorReference) {
-            armedAnchorStatusTitle.setText("Acquiring anchor position");
+            armedAnchorStatusTitle.setText(R.string.acquiring_anchor_position);
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_blue));
         } else if (setupActive) {
-            armedAnchorStatusTitle.setText("Laying anchor");
+            armedAnchorStatusTitle.setText(R.string.laying_anchor);
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_blue));
         } else {
-            armedAnchorStatusTitle.setText("Anchor alarm armed");
+            armedAnchorStatusTitle.setText(getString(
+                    R.string.armed_mode, anchorModeDisplayName(state.anchorMode)));
             setCircleColor(armedAnchorStatusDot, getColor(R.color.nav_success));
         }
-        armedAnchorMode.setText(state.anchorMode.displayName);
+        armedAnchorMode.setText(anchorModeDisplayName(state.anchorMode));
         armedAnchorDistance.setText(Double.isFinite(state.anchorDistanceMeters)
                 ? displayUnits.format(state.anchorDistanceMeters, 1) : "—");
         armedAnchorDistance.setTextColor(getColor(
                 state.anchorAlarmTriggered ? R.color.nav_error : R.color.nav_text));
-        armedAnchorDistanceLabel.setText(
-                "distance from reference • " + displayUnits.format(state.anchorRadiusMeters)
-                        + " limit");
+        armedAnchorDistanceLabel.setText(getString(
+                R.string.distance_from_reference_limit,
+                displayUnits.format(state.anchorRadiusMeters)));
         boolean radiusAdjustable = state.anchorAlarmArmed
                 || (setupActive && state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING);
         armedRadiusControls.setVisibility(radiusAdjustable ? View.VISIBLE : View.GONE);
         armedAnchorRadiusLabel.setText(state.anchorMode == AnchorAlarm.Mode.FREE_SWINGING
-                ? "Swing radius" : "Alarm radius");
+                ? R.string.swing_radius : R.string.alarm_radius);
         armedAnchorRadiusValue.setText(displayUnits.format(state.anchorRadiusMeters));
         armedAnchorRadiusMinusButton.setEnabled(
                 state.anchorRadiusMeters > state.anchorMode.minimumRadiusMeters);
@@ -1350,15 +1368,22 @@ public final class MainActivity extends Activity implements
         anchorPlotView.setDisplayUnits(displayUnits);
         anchorPlotView.setState(state);
         String accuracy = state.hasLocation && state.accuracyMeters >= 0.0
-                ? " • GPS " + displayUnits.formatAccuracy(state.accuracyMeters) : "";
-        armedAnchorTrackSummary.setText(
-                displayUnits.format(state.anchorRadiusMeters) + " limit • "
-                        + state.anchorTrackPoints.size() + " plotted fixes" + accuracy);
+                ? getString(
+                        R.string.gps_accuracy_suffix,
+                        displayUnits.formatAccuracy(state.accuracyMeters))
+                : "";
+        armedAnchorTrackSummary.setText(getResources().getQuantityString(
+                R.plurals.anchor_track_summary,
+                state.anchorTrackPoints.size(),
+                displayUnits.format(state.anchorRadiusMeters),
+                state.anchorTrackPoints.size(),
+                accuracy));
         String gpsWarning = state.hasLocation && state.fixAgeSeconds <= STALE_FIX_SECONDS
                 ? AnchorGpsQuality.degradedWarning(
                         state.accuracyMeters,
                         state.anchorRadiusMeters,
-                        displayUnits)
+                        displayUnits,
+                        this)
                 : null;
         armedGpsAccuracyWarningBody.setText(gpsWarning == null ? "" : gpsWarning);
         armedGpsAccuracyWarning.setVisibility(
@@ -1374,24 +1399,41 @@ public final class MainActivity extends Activity implements
                 state.anchorAlarmTriggered ? View.VISIBLE : View.GONE);
         armedAnchorPrimaryButton.setText(setupActive
                 ? state.hasAnchorReference
-                ? "●  Arm anchor alarm"
-                : "⌖  Acquiring anchor position…"
-                : "■  Disarm anchor watch");
+                ? getString(R.string.arm_anchor_alarm_button)
+                : getString(R.string.acquiring_anchor_position_button)
+                : getString(R.string.disarm_anchor_watch_button));
         armedAnchorPrimaryButton.setEnabled(!setupActive || state.hasAnchorReference);
         styleActionButton(armedAnchorPrimaryButton,
                 setupActive ? R.color.nav_blue : R.color.nav_error);
         cancelAnchorSetupButton.setVisibility(setupActive ? View.VISIBLE : View.GONE);
         anchorPlotNote.setText(setupActive
-                ? "North-up • the trail begins at the anchor-drop point and updates while you "
-                        + "pay out the rode. The alarm is not armed yet."
-                : "North-up • focused on the alarm boundary, current position, and recent trail. "
-                        + "Isolated older GPS outliers do not shrink the plot.");
+                ? R.string.anchor_laying_plot_note : R.string.anchor_plot_note);
+    }
+
+    private void renderAnchorDetails(BridgeState state, DisplayUnits displayUnits) {
+        String reference = state.hasAnchorReference
+                ? String.format(
+                        Locale.US,
+                        "%.6f, %.6f",
+                        state.anchorReferenceLatitude,
+                        state.anchorReferenceLongitude)
+                : getString(R.string.not_set);
+        String distance = state.hasAnchorReference
+                && Double.isFinite(state.anchorDistanceMeters)
+                ? getString(
+                        R.string.distance_and_limit,
+                        displayUnits.format(state.anchorDistanceMeters, 1),
+                        displayUnits.format(state.anchorRadiusMeters))
+                : "—";
+        for (TextView value : anchorReferenceValues) value.setText(reference);
+        for (TextView value : anchorDistanceValues) value.setText(distance);
     }
 
     private void renderAddresses(List<BridgeState.NetworkAddress> addresses) {
         addressesContainer.removeAllViews();
         if (addresses.isEmpty()) {
-            TextView empty = text("No Wi‑Fi or hotspot address found", 14, R.color.nav_warning);
+            TextView empty = text(
+                    getString(R.string.no_wifi_hotspot_address), 14, R.color.nav_warning);
             addressesContainer.addView(empty, matchWrap());
             return;
         }
@@ -1424,10 +1466,10 @@ public final class MainActivity extends Activity implements
         anchorActionMessage = null;
         if (latestState.anchorAlarmArmed) {
             new AlertDialog.Builder(this)
-                    .setTitle("Disarm anchor watch?")
-                    .setMessage("The boat will no longer be monitored for drift or GPS loss.")
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Disarm", (dialog, which) -> {
+                    .setTitle(R.string.disarm_anchor_watch_question)
+                    .setMessage(R.string.disarm_anchor_watch_message)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.disarm, (dialog, which) -> {
                         pendingPermissionAction = PENDING_NONE;
                         sendServiceAction(BridgeService.ACTION_DISARM_ANCHOR);
                     })
@@ -1474,54 +1516,52 @@ public final class MainActivity extends Activity implements
         content.setPadding(dp(20), dp(8), dp(20), dp(8));
 
         TextView introduction = text(
-                "Confirm the permissions and alarm sound this boat phone needs while it "
-                        + "remains aboard. Changes are checked again before arming.",
-                14,
-                R.color.nav_secondary);
+                getString(R.string.readiness_intro), 14, R.color.nav_secondary);
         introduction.setLineSpacing(0.0f, 1.14f);
         content.addView(introduction, matchWrap());
 
         readinessLocationRow = buildReadinessRow(
-                "Precise Location",
-                "Precise GPS is required",
-                "Allow Location",
+                getString(R.string.precise_location),
+                getString(R.string.precise_gps_required),
+                getString(R.string.allow_location),
                 this::requestReadinessLocationPermission);
         content.addView(readinessLocationRow.container, readinessRowParams());
 
         readinessBackgroundRow = buildReadinessRow(
-                "Screen-locked GPS",
-                "Uses a location foreground service while the watch is active",
+                getString(R.string.screen_locked_gps),
+                getString(R.string.screen_locked_gps_detail),
                 null,
                 null);
         content.addView(readinessBackgroundRow.container, readinessRowParams());
 
         readinessNotificationRow = buildReadinessRow(
-                "Notifications",
-                "Alarm notifications are required",
-                "Allow Notifications",
+                getString(R.string.notifications),
+                getString(R.string.alarm_notifications_required),
+                getString(R.string.allow_notifications),
                 this::requestReadinessNotificationPermission);
         content.addView(readinessNotificationRow.container, readinessRowParams());
 
         readinessDndRow = buildReadinessRow(
-                "Do Not Disturb access",
-                "Allow alarms through supported Do Not Disturb modes",
-                "Open DND Access",
+                getString(R.string.dnd_access),
+                getString(R.string.dnd_access_detail),
+                getString(R.string.open_dnd_access),
                 this::openDoNotDisturbAccessSettings);
         content.addView(readinessDndRow.container, readinessRowParams());
 
         readinessPowerRow = buildReadinessRow(
-                "Power settings",
-                "Power saving must not restrict location",
-                "Open Power Settings",
+                getString(R.string.power_settings),
+                getString(R.string.power_settings_detail),
+                getString(R.string.open_power_settings),
                 this::openAnchorPowerSettings);
         content.addView(readinessPowerRow.container, readinessRowParams());
 
         LinearLayout sirenSection = vertical();
-        TextView sirenTitle = text("Alarm sound test", 15, R.color.nav_text);
+        TextView sirenTitle = text(
+                getString(R.string.alarm_sound_test), 15, R.color.nav_text);
         sirenTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         sirenSection.addView(sirenTitle, matchWrap());
         readinessSirenStatus = text(
-                "Play the two-second siren, then confirm that you heard it",
+                getString(R.string.siren_test_detail),
                 13,
                 R.color.nav_secondary);
         readinessSirenStatus.setLineSpacing(0.0f, 1.1f);
@@ -1529,25 +1569,21 @@ public final class MainActivity extends Activity implements
         sirenStatusParams.topMargin = dp(3);
         sirenSection.addView(readinessSirenStatus, sirenStatusParams);
         readinessSirenButton = smallButton(
-                "Play two-second siren",
+                getString(R.string.play_siren),
                 this::playReadinessSiren);
         sirenSection.addView(readinessSirenButton, wrapWrap());
         readinessSirenConfirmationButton = smallButton(
-                "I heard the siren",
+                getString(R.string.heard_siren),
                 this::confirmReadinessSirenHeard);
         sirenSection.addView(readinessSirenConfirmationButton, wrapWrap());
         TextView soundLimitation = text(
-                "Test the actual phone volume and Do Not Disturb mode you will use aboard.",
-                12,
-                R.color.nav_secondary);
+                getString(R.string.siren_test_warning), 12, R.color.nav_secondary);
         soundLimitation.setLineSpacing(0.0f, 1.1f);
         sirenSection.addView(soundLimitation, matchWrap());
         content.addView(sirenSection, readinessRowParams());
 
         readinessSafetyAcknowledgement = new CheckBox(this);
-        readinessSafetyAcknowledgement.setText(
-                "I understand Anchor Watch is an auxiliary aid. It does not replace a "
-                        + "responsible anchor watch or independent navigation and safety equipment.");
+        readinessSafetyAcknowledgement.setText(R.string.safety_acknowledgement);
         readinessSafetyAcknowledgement.setTextSize(13);
         readinessSafetyAcknowledgement.setTextColor(getColor(R.color.nav_text));
         readinessSafetyAcknowledgement.setChecked(readinessPreferences().getBoolean(
@@ -1564,10 +1600,7 @@ public final class MainActivity extends Activity implements
         content.addView(readinessSafetyAcknowledgement, readinessRowParams());
 
         TextView lifecycleWarning = text(
-                "Keep the ongoing monitoring notification visible and the phone powered. "
-                        + "After a force-stop or reboot, reopen the app and confirm the watch state.",
-                12,
-                R.color.nav_secondary);
+                getString(R.string.foreground_service_warning), 12, R.color.nav_secondary);
         lifecycleWarning.setLineSpacing(0.0f, 1.12f);
         content.addView(lifecycleWarning, readinessRowParams());
 
@@ -1577,11 +1610,13 @@ public final class MainActivity extends Activity implements
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         anchorReadinessDialog = new AlertDialog.Builder(this)
-                .setTitle("Safety Readiness")
+                .setTitle(R.string.safety_readiness)
                 .setView(scrollView)
-                .setNegativeButton("Close", null)
+                .setNegativeButton(R.string.close, null)
                 .setPositiveButton(
-                        resumeArmingAfterReadiness ? "Continue and arm" : "Save readiness",
+                        resumeArmingAfterReadiness
+                                ? getString(R.string.continue_and_arm)
+                                : getString(R.string.save_readiness),
                         null)
                 .create();
         anchorReadinessDialog.setOnShowListener(ignored -> {
@@ -1633,8 +1668,8 @@ public final class MainActivity extends Activity implements
         boolean complete = isAnchorReadinessComplete();
         for (Button button : readinessStatusButtons) {
             button.setText(complete
-                    ? "Safety readiness · Ready · Test alarm again"
-                    : "Safety readiness · Needs attention");
+                    ? R.string.readiness_ready_test_again
+                    : R.string.readiness_needs_attention);
             button.setTextColor(getColor(complete ? R.color.nav_success : R.color.nav_warning));
         }
         if (anchorReadinessDialog == null) return;
@@ -1651,35 +1686,38 @@ public final class MainActivity extends Activity implements
         updateReadinessRow(
                 readinessLocationRow,
                 locationReady,
-                locationReady ? "Precise GPS allowed" : "Choose Precise Location",
-                locationReady ? null : "Allow Location");
+                locationReady
+                        ? getString(R.string.precise_gps_allowed)
+                        : getString(R.string.choose_precise_location),
+                locationReady ? null : getString(R.string.allow_location));
         updateReadinessRow(
                 readinessBackgroundRow,
                 true,
-                "The active location foreground service keeps GPS running with the screen locked",
+                getString(R.string.foreground_service_keeps_gps),
                 null);
         updateReadinessRow(
                 readinessNotificationRow,
                 notificationReady,
                 notificationReady
-                        ? "Alarm notifications enabled"
-                        : "Enable app and alarm-channel notifications",
+                        ? getString(R.string.alarm_notifications_enabled)
+                        : getString(R.string.enable_alarm_notifications),
                 notificationReady ? null : notificationActionTitle());
         updateReadinessRow(
                 readinessDndRow,
                 dndReady,
                 dndReady
-                        ? "Do Not Disturb access granted"
-                        : "Grant access, then test the alarm in your chosen DND mode",
-                dndReady ? null : "Open DND Access");
+                        ? getString(R.string.dnd_access_granted)
+                        : getString(R.string.grant_dnd_and_test),
+                dndReady ? null : getString(R.string.open_dnd_access));
         updateReadinessRow(
                 readinessPowerRow,
                 powerReady,
                 powerReady
-                        ? "No restrictive system Power Saving mode detected; set app battery "
-                                + "use to Unrestricted if offered"
-                        : "Power Saving can stop or delay GPS after the screen locks",
-                powerReady ? "Review Battery Settings" : "Open Power Settings");
+                        ? getString(R.string.power_saving_not_restrictive)
+                        : getString(R.string.power_saving_can_stop_gps),
+                powerReady
+                        ? getString(R.string.review_battery_settings)
+                        : getString(R.string.open_power_settings));
 
         if (readinessSafetyAcknowledgement != null) {
             readinessSafetyAcknowledgement.setChecked(readinessPreferences().getBoolean(
@@ -1693,10 +1731,10 @@ public final class MainActivity extends Activity implements
                 sirenStatus = readinessSirenError;
                 sirenStatusColor = R.color.nav_error;
             } else if (sirenConfirmed) {
-                sirenStatus = "✓  Siren confirmed on this phone";
+                sirenStatus = getString(R.string.siren_confirmed);
                 sirenStatusColor = R.color.nav_success;
             } else {
-                sirenStatus = "Play the two-second siren, then confirm that you heard it";
+                sirenStatus = getString(R.string.siren_test_detail);
                 sirenStatusColor = R.color.nav_secondary;
             }
             readinessSirenStatus.setText(sirenStatus);
@@ -1706,8 +1744,10 @@ public final class MainActivity extends Activity implements
             boolean canTest = !latestState.anchorAlarmArmed;
             readinessSirenButton.setEnabled(canTest);
             readinessSirenButton.setText(canTest
-                    ? sirenConfirmed ? "Test alarm again" : "Play two-second siren"
-                    : "Disarm before testing again");
+                    ? sirenConfirmed
+                    ? getString(R.string.test_alarm_again)
+                    : getString(R.string.play_siren)
+                    : getString(R.string.disarm_before_testing));
         }
         if (readinessSirenConfirmationButton != null) {
             readinessSirenConfirmationButton.setVisibility(
@@ -1716,7 +1756,9 @@ public final class MainActivity extends Activity implements
         }
         if (readinessCompleteButton != null) {
             readinessCompleteButton.setText(
-                    resumeArmingAfterReadiness ? "Continue and arm" : "Save readiness");
+                    resumeArmingAfterReadiness
+                            ? getString(R.string.continue_and_arm)
+                            : getString(R.string.save_readiness));
             readinessCompleteButton.setEnabled(anchorReadinessRequirementsSatisfied());
         }
     }
@@ -1732,7 +1774,9 @@ public final class MainActivity extends Activity implements
         if (rawTitle.startsWith("✓  ") || rawTitle.startsWith("⚠  ")) {
             rawTitle = rawTitle.substring(3);
         }
-        row.title.setText((ready ? "✓  " : "⚠  ") + rawTitle);
+        row.title.setText(getString(
+                ready ? R.string.readiness_row_ready : R.string.readiness_row_attention,
+                rawTitle));
         row.title.setTextColor(getColor(ready ? R.color.nav_success : R.color.nav_warning));
         row.detail.setText(detail);
         if (row.action != null) {
@@ -1833,7 +1877,8 @@ public final class MainActivity extends Activity implements
         return Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
-                ? "Allow Notifications" : "Open Notification Settings";
+                ? getString(R.string.allow_notifications)
+                : getString(R.string.open_notification_settings);
     }
 
     private void openNotificationSettings() {
@@ -1900,7 +1945,7 @@ public final class MainActivity extends Activity implements
             readinessHandler.postDelayed(this::stopReadinessSiren, 2_000L);
         } catch (RuntimeException error) {
             readinessSirenPlayedThisVisit = false;
-            readinessSirenError = "The test siren could not start. Check alarm sound settings.";
+            readinessSirenError = getString(R.string.siren_test_failed);
             stopReadinessSiren();
         }
         updateAnchorReadinessDialog();
@@ -1968,7 +2013,7 @@ public final class MainActivity extends Activity implements
         pendingPermissionAction = action;
         if (requiresNewAnchorReferenceFix(action)) {
             pendingAnchorFixStartedElapsedNanos = SystemClock.elapsedRealtimeNanos();
-            anchorActionMessage = "Acquiring a new GPS position…";
+            anchorActionMessage = getString(R.string.acquiring_new_gps);
             renderAnchorAlarm(latestState);
         } else {
             pendingAnchorFixStartedElapsedNanos = 0L;
@@ -2004,7 +2049,7 @@ public final class MainActivity extends Activity implements
             return;
         }
         if (!hasFreshGpsFix(latestState)) {
-            anchorActionMessage = "Acquiring a fresh GPS position…";
+            anchorActionMessage = getString(R.string.acquiring_fresh_gps);
             anchorMessage.setText(anchorActionMessage);
             anchorMessage.setVisibility(View.VISIBLE);
             if (binder != null) binder.refreshLocationUpdates();
@@ -2014,19 +2059,18 @@ public final class MainActivity extends Activity implements
         if (requiresNewAnchorReferenceFix(pendingPermissionAction)) {
             if (latestState.fixElapsedRealtimeNanos
                     <= pendingAnchorFixStartedElapsedNanos) {
-                anchorActionMessage = "Acquiring a new GPS position…";
+                anchorActionMessage = getString(R.string.acquiring_new_gps);
                 renderAnchorAlarm(latestState);
                 return;
             }
             if (latestState.accuracyMeters
                     > MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS) {
                 DisplayUnits displayUnits = DisplayUnits.load(this);
-                anchorActionMessage = "Improving GPS accuracy… currently "
-                        + displayUnits.formatAccuracy(latestState.accuracyMeters)
-                        + "; need "
-                        + displayUnits.formatAccuracy(
-                                MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS)
-                        + ".";
+                anchorActionMessage = getString(
+                        R.string.improving_gps_accuracy,
+                        displayUnits.formatAccuracy(latestState.accuracyMeters),
+                        displayUnits.formatAccuracy(
+                                MAXIMUM_ANCHOR_REFERENCE_ACCURACY_METERS));
                 renderAnchorAlarm(latestState);
                 return;
             }
@@ -2037,19 +2081,19 @@ public final class MainActivity extends Activity implements
         pendingAnchorFixStartedElapsedNanos = 0L;
         if (action == PENDING_MARK_ANCHOR) {
             if (binder == null) {
-                anchorActionMessage = "GPS service is reconnecting. Try again in a moment.";
+                anchorActionMessage = getString(R.string.gps_service_reconnecting);
                 renderAnchorAlarm(latestState);
                 return;
             }
             binder.updateAnchorSettings(selectedAnchorMode, selectedAnchorRadiusMeters);
             binder.markAnchorReference(latestState.latitude, latestState.longitude);
-            anchorActionMessage = "Anchor-drop position recorded. Arm after paying out the rode.";
+            anchorActionMessage = getString(R.string.anchor_position_recorded);
             renderAnchorAlarm(latestState);
             return;
         }
 
         if (action == PENDING_ARM_ANCHOR && !isAnchorReadinessComplete()) {
-            anchorActionMessage = "Complete the safety readiness check before arming.";
+            anchorActionMessage = getString(R.string.complete_readiness_before_arming);
             renderAnchorAlarm(latestState);
             showAnchorReadiness(true);
             return;
@@ -2061,7 +2105,7 @@ public final class MainActivity extends Activity implements
                 ? latestState.longitude : latestState.anchorReferenceLongitude;
         if (selectedAnchorMode == AnchorAlarm.Mode.FREE_SWINGING
                 && !latestState.hasAnchorReference) {
-            anchorActionMessage = "Record the anchor-drop position before arming free-swinging mode.";
+            anchorActionMessage = getString(R.string.record_position_before_arming);
             renderAnchorAlarm(latestState);
             return;
         }
@@ -2084,7 +2128,7 @@ public final class MainActivity extends Activity implements
                 pendingPermissionAction = PENDING_NONE;
                 pendingAnchorFixStartedElapsedNanos = 0L;
             }
-            permissionError = "Choose Precise Location for GPS streaming and the anchor alarm.";
+            permissionError = getString(R.string.choose_precise_location_error);
             render(latestState);
         }
     }
@@ -2176,9 +2220,12 @@ public final class MainActivity extends Activity implements
     private void addReleasePolicyLinks(LinearLayout parent) {
         LinearLayout links = horizontal();
         links.setGravity(Gravity.CENTER_VERTICAL);
-        addReleasePolicyLink(links, "Privacy", R.string.anchor_watch_privacy_url);
-        addReleasePolicyLink(links, "Support", R.string.anchor_watch_support_url);
-        addReleasePolicyLink(links, "Terms", R.string.anchor_watch_terms_url);
+        addReleasePolicyLink(
+                links, getString(R.string.privacy), R.string.anchor_watch_privacy_url);
+        addReleasePolicyLink(
+                links, getString(R.string.support), R.string.anchor_watch_support_url);
+        addReleasePolicyLink(
+                links, getString(R.string.terms), R.string.anchor_watch_terms_url);
         LinearLayout.LayoutParams linksParams = matchWrap();
         linksParams.topMargin = dp(8);
         parent.addView(links, linksParams);
@@ -2189,7 +2236,8 @@ public final class MainActivity extends Activity implements
         boolean configured = ReleaseLinks.configuredUri(this, resourceId) != null;
         button.setEnabled(configured);
         if (!configured) {
-            button.setContentDescription(title + " link pending release configuration");
+            button.setContentDescription(
+                    getString(R.string.release_link_pending, title));
         }
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 0,
@@ -2223,23 +2271,23 @@ public final class MainActivity extends Activity implements
     }
 
     private String permissionDescription() {
-        if (hasFineLocationPermission()) return "Precise";
+        if (hasFineLocationPermission()) return getString(R.string.precise);
         if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) return "Approximate only";
+                == PackageManager.PERMISSION_GRANTED) return getString(R.string.approximate_only);
         boolean requested = getPreferences(MODE_PRIVATE).getBoolean("permission_requested", false);
-        return requested ? "Denied" : "Not requested";
+        return requested ? getString(R.string.denied) : getString(R.string.not_requested);
     }
 
     private String statusTitle(BridgeState state, boolean fineLocation) {
-        if (!state.streaming) return "Stopped";
-        if (!fineLocation) return "Location permission needed";
-        if (!state.hasLocation) return "Acquiring GPS fix";
-        if (state.fixAgeSeconds > STALE_FIX_SECONDS) return "GPS fix is stale";
+        if (!state.streaming) return getString(R.string.stopped);
+        if (!fineLocation) return getString(R.string.location_permission_needed);
+        if (!state.hasLocation) return getString(R.string.acquiring_gps_fix);
+        if (state.fixAgeSeconds > STALE_FIX_SECONDS) return getString(R.string.gps_fix_stale);
         if (state.clientCount == 0 && state.udpBroadcastTargetCount == 0) {
-            return "Waiting for hotspot or Wi-Fi";
+            return getString(R.string.waiting_hotspot_wifi);
         }
-        if (state.clientCount == 0) return "Broadcasting NMEA";
-        return "Streaming NMEA";
+        if (state.clientCount == 0) return getString(R.string.broadcasting_nmea);
+        return getString(R.string.streaming_nmea);
     }
 
     private int statusColor(BridgeState state, boolean fineLocation) {
@@ -2273,22 +2321,20 @@ public final class MainActivity extends Activity implements
         background.setStroke(dp(2), getColor(R.color.nav_warning));
         warning.setBackground(background);
 
-        TextView title = text("Turn off Power saving", 15, R.color.nav_warning);
+        TextView title = text(
+                getString(R.string.power_saving_title), 15, R.color.nav_warning);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         warning.addView(title, matchWrap());
 
         TextView body = text(
-                "Power saving can interrupt GPS after the screen locks and cause a "
-                        + "lost-GPS alarm. Turn it off before relying on the anchor watch.",
-                13,
-                R.color.nav_text);
+                getString(R.string.power_saving_warning), 13, R.color.nav_text);
         body.setLineSpacing(0.0f, 1.12f);
         LinearLayout.LayoutParams bodyParams = matchWrap();
         bodyParams.topMargin = dp(5);
         warning.addView(body, bodyParams);
 
         Button settings = smallButton(
-                "Open Power saving settings",
+                getString(R.string.open_power_saving_settings),
                 this::openPowerSavingSettings);
         settings.setTextColor(getColor(R.color.nav_warning));
         warning.addView(settings, wrapWrap());
@@ -2305,7 +2351,8 @@ public final class MainActivity extends Activity implements
         background.setStroke(dp(2), getColor(R.color.nav_warning));
         warning.setBackground(background);
 
-        TextView title = text("⚠  Degraded GPS precision", 15, R.color.nav_warning);
+        TextView title = text(
+                getString(R.string.degraded_gps_precision), 15, R.color.nav_warning);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         warning.addView(title, matchWrap());
 
@@ -2323,7 +2370,8 @@ public final class MainActivity extends Activity implements
             String title,
             String detail
     ) {
-        TextView titleView = text("✓  " + title, 14, R.color.nav_text);
+        TextView titleView = text(
+                getString(R.string.purchase_benefit_title, title), 14, R.color.nav_text);
         titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = matchWrap();
         titleParams.topMargin = dp(12);
@@ -2424,8 +2472,10 @@ public final class MainActivity extends Activity implements
         background.setCornerRadius(dp(14));
         switcher.setBackground(background);
 
-        anchorSectionButton = sectionButton("Anchor", SECTION_ANCHOR);
-        bridgeSectionButton = sectionButton("NMEA Stream", SECTION_BRIDGE);
+        anchorSectionButton = sectionButton(
+                getString(R.string.anchor_section_title), SECTION_ANCHOR);
+        bridgeSectionButton = sectionButton(
+                getString(R.string.nmea_stream_title), SECTION_BRIDGE);
         switcher.addView(anchorSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
         switcher.addView(bridgeSectionButton, new LinearLayout.LayoutParams(0, dp(46), 1));
         return switcher;
@@ -2454,7 +2504,8 @@ public final class MainActivity extends Activity implements
             anchorDashboard.setVisibility(section == SECTION_ANCHOR ? View.VISIBLE : View.GONE);
         }
         if (pageTitle != null) {
-            pageTitle.setText(section == SECTION_ANCHOR ? "Anchor Watch" : "NMEA Stream");
+            pageTitle.setText(section == SECTION_ANCHOR
+                    ? R.string.anchor_watch_title : R.string.nmea_stream_title);
         }
         styleSectionButton(bridgeSectionButton, section == SECTION_BRIDGE);
         styleSectionButton(anchorSectionButton, section == SECTION_ANCHOR);
@@ -2473,22 +2524,33 @@ public final class MainActivity extends Activity implements
     }
 
     private void updateSectionButtons(BridgeState state) {
-        bridgeSectionButton.setText(state.streaming ? "NMEA Stream  •" : "NMEA Stream");
+        bridgeSectionButton.setText(state.streaming
+                ? getString(R.string.section_active, getString(R.string.nmea_stream_title))
+                : getString(R.string.nmea_stream_title));
         boolean anchorActive = state.anchorAlarmArmed
                 || state.anchorSetupActive
                 || anchorSetupRequested;
-        anchorSectionButton.setText(anchorActive ? "Anchor  •" : "Anchor");
+        anchorSectionButton.setText(anchorActive
+                ? getString(R.string.section_active, getString(R.string.anchor_section_title))
+                : getString(R.string.anchor_section_title));
         bridgeSectionButton.setContentDescription(
-                state.streaming ? "NMEA Stream, active" : "NMEA Stream, inactive");
+                state.streaming
+                        ? getString(R.string.section_state, getString(R.string.nmea_stream_title),
+                                getString(R.string.active_accessibility))
+                        : getString(R.string.section_state, getString(R.string.nmea_stream_title),
+                                getString(R.string.inactive_accessibility)));
         anchorSectionButton.setContentDescription(state.anchorAlarmArmed
-                ? "Anchor, armed" : anchorActive ? "Anchor, laying anchor" : "Anchor, disarmed");
+                ? getString(R.string.anchor_section_armed)
+                : anchorActive
+                ? getString(R.string.anchor_section_laying)
+                : getString(R.string.anchor_section_disarmed));
     }
 
     private View buildDisclosureSection(String title, LinearLayout body) {
         LinearLayout section = vertical();
         Button header = new Button(this);
         header.setAllCaps(false);
-        header.setText(title + "  ›");
+        header.setText(getString(R.string.disclosure_collapsed, title));
         header.setTextSize(16);
         header.setTextColor(getColor(R.color.nav_text));
         header.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -2504,7 +2566,9 @@ public final class MainActivity extends Activity implements
         header.setOnClickListener(view -> {
             boolean expanded = body.getVisibility() == View.VISIBLE;
             body.setVisibility(expanded ? View.GONE : View.VISIBLE);
-            header.setText(title + (expanded ? "  ›" : "  ⌄"));
+            header.setText(getString(
+                    expanded ? R.string.disclosure_collapsed : R.string.disclosure_expanded,
+                    title));
         });
         section.addView(header, matchWrap());
         LinearLayout.LayoutParams bodyParams = matchWrap();
@@ -2515,21 +2579,27 @@ public final class MainActivity extends Activity implements
 
     private View buildAnchorDetailsCard() {
         LinearLayout card = card();
+        TextView reference = addDetailRow(
+                card, getString(R.string.reference_position), true);
+        anchorReferenceValues.add(reference);
+        TextView distance = addDetailRow(
+                card, getString(R.string.distance_from_reference_label), false);
+        anchorDistanceValues.add(distance);
+        addDivider(card);
         TextView behavior = text(
-                "A drift must remain outside the radius for 5 seconds. GPS loss alerts after "
-                        + "30 seconds. The alarm continues until silenced or the watch is disarmed.",
-                14,
-                R.color.nav_secondary);
+                getString(R.string.anchor_alarm_behavior), 14, R.color.nav_secondary);
         behavior.setLineSpacing(0.0f, 1.12f);
         card.addView(behavior, matchWrap());
         addDivider(card);
         Button readiness = smallButton(
-                "Safety readiness · Needs attention",
+                getString(R.string.readiness_needs_attention),
                 () -> showAnchorReadiness(false));
         readinessStatusButtons.add(readiness);
         card.addView(readiness, wrapWrap());
         Button displayUnits = smallButton(
-                "Display units · " + DisplayUnits.load(this).preferenceDetail(),
+                getString(
+                        R.string.display_units_value,
+                        DisplayUnits.load(this).preferenceDetail()),
                 this::showDisplayUnitPicker);
         displayUnitButtons.add(displayUnits);
         card.addView(displayUnits, wrapWrap());
@@ -2542,33 +2612,33 @@ public final class MainActivity extends Activity implements
         DisplayUnits.Preference selectedPreference = DisplayUnits.loadPreference(this);
         int selectedIndex = 0;
         for (int index = 0; index < preferences.length; index++) {
-            DisplayUnits candidate = new DisplayUnits(preferences[index], Locale.getDefault());
+            DisplayUnits candidate = new DisplayUnits(
+                    this, preferences[index], Locale.getDefault());
             labels[index] = candidate.preferenceDetail();
             if (preferences[index] == selectedPreference) selectedIndex = index;
         }
 
         new AlertDialog.Builder(this)
-                .setTitle("Display units")
+                .setTitle(R.string.display_units)
                 .setSingleChoiceItems(labels, selectedIndex, (dialog, position) -> {
                     DisplayUnits.save(this, preferences[position]);
                     dialog.dismiss();
                     render(latestState);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
     private void updateDisplayUnitButtons() {
-        String label = "Display units · " + DisplayUnits.load(this).preferenceDetail();
+        String label = getString(
+                R.string.display_units_value,
+                DisplayUnits.load(this).preferenceDetail());
         for (Button button : displayUnitButtons) button.setText(label);
     }
 
     private TextView safetyNote() {
         TextView safety = text(
-                "⚠  Test the alarm and phone volume before relying on it. Keep a physical "
-                        + "anchor watch and an independent navigation backup.",
-                13,
-                R.color.nav_secondary);
+                getString(R.string.final_safety_warning), 13, R.color.nav_secondary);
         safety.setLineSpacing(0.0f, 1.18f);
         safety.setPadding(dp(5), dp(2), dp(5), dp(12));
         return safety;
@@ -2783,6 +2853,11 @@ public final class MainActivity extends Activity implements
                 selectedAnchorRadiusMeters < selectedAnchorMode.maximumRadiusMeters);
     }
 
+    private String anchorModeDisplayName(AnchorAlarm.Mode mode) {
+        return getString(mode == AnchorAlarm.Mode.FREE_SWINGING
+                ? R.string.free_swinging : R.string.shorelined);
+    }
+
     private TextView text(String value, float sizeSp, int colorResource) {
         TextView view = new TextView(this);
         view.setText(value);
@@ -2830,11 +2905,11 @@ public final class MainActivity extends Activity implements
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private static BridgeState emptyState() {
+    private static BridgeState emptyState(String listenerDescription) {
         return new BridgeState(
                 false, false,
                 0.0, 0.0, 0.0, -1.0, -1.0, -1.0,
-                Double.POSITIVE_INFINITY, 0L, 0, 0, "Stopped",
+                Double.POSITIVE_INFINITY, 0L, 0, 0, listenerDescription,
                 new ArrayList<>(), "", null,
                 AnchorAlarm.Mode.SHORELINED,
                 false, false, false, false, false,

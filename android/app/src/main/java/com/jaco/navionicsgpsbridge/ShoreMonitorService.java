@@ -108,7 +108,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     private long lastConnectAttemptElapsedMillis;
     private long acknowledgedEventSequence;
     private String historySessionId;
-    private String statusMessage = "Waiting for pairing";
+    private String statusMessage;
     private Ringtone alarmRingtone;
     private int previousAlarmVolume = -1;
     private boolean alarmPresentationActive;
@@ -125,16 +125,17 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     @Override
     public void onCreate() {
         super.onCreate();
+        statusMessage = getString(R.string.waiting_for_pairing);
         preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
         monitoringEnabled = preferences.getBoolean(KEY_ENABLED, false);
         acknowledgedEventSequence = preferences.getLong(KEY_ACKNOWLEDGED_EVENT, 0L);
         sessionWasArmed = preferences.getBoolean(KEY_SESSION_WAS_ARMED, false);
         pairingStore = new AnchorPairingStore(this);
-        client = new AnchorSyncClient(this);
+        client = new AnchorSyncClient(this, this);
         monitoringStartedElapsedMillis = SystemClock.elapsedRealtime();
         createNotificationChannels();
         loadConfiguration();
-        scheduler.scheduleAtFixedRate(this::monitorTick, 0L, 10L, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(this::monitorTick, 0L, 10L, TimeUnit.SECONDS);
     }
 
     @Override
@@ -169,8 +170,8 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 historySessionId = null;
                 lastConnectAttemptElapsedMillis = 0L;
                 statusMessage = configuration == null
-                        ? "Pair this phone with the boat device"
-                        : "Connecting to boat…";
+                        ? getString(R.string.pair_phone_with_boat)
+                        : getString(R.string.connecting_to_boat);
             }
             monitoringEnabled = true;
         }
@@ -203,7 +204,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             connected = true;
             connecting = false;
             linkLossEpisodeActive = false;
-            statusMessage = "Connected — waiting for boat state";
+            statusMessage = getString(R.string.connected_waiting_boat_state);
         }
         lastReportedSoundReady = isSoundReady();
         client.sendSoundReady(lastReportedSoundReady);
@@ -221,7 +222,9 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             lastStateElapsedMillis = SystemClock.elapsedRealtime();
             lastHeartbeatAtMillis = System.currentTimeMillis();
             linkLossEpisodeActive = false;
-            statusMessage = state.armed ? "Anchor watch live" : "Boat anchor watch is disarmed";
+            statusMessage = state.armed
+                    ? getString(R.string.anchor_watch_live)
+                    : getString(R.string.boat_anchor_watch_disarmed);
 
             if (state.armed) {
                 sessionWasArmed = true;
@@ -306,9 +309,9 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 configurationLoaded = true;
                 configuration = loaded;
                 if (loaded == null) {
-                    statusMessage = "Pair this phone with the boat device";
+                    statusMessage = getString(R.string.pair_phone_with_boat);
                 } else if (!monitoringEnabled) {
-                    statusMessage = "Monitoring stopped";
+                    statusMessage = getString(R.string.monitoring_stopped);
                 } else if (identityChanged) {
                     monitoringStartedElapsedMillis = SystemClock.elapsedRealtime();
                     lastStateElapsedMillis = 0L;
@@ -326,16 +329,16 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                             .putBoolean(KEY_SESSION_WAS_ARMED, false)
                             .putLong(KEY_ACKNOWLEDGED_EVENT, 0L)
                             .apply();
-                    statusMessage = "Connecting to boat…";
+                    statusMessage = getString(R.string.connecting_to_boat);
                 } else if (endpointChanged) {
                     connected = false;
                     connecting = false;
                     historyRequestInFlight = false;
-                    statusMessage = "Connecting to boat…";
+                    statusMessage = getString(R.string.connecting_to_boat);
                 }
                 if (identityChanged || endpointChanged) {
                     replacedClient = client;
-                    client = new AnchorSyncClient(this);
+                    client = new AnchorSyncClient(this, this);
                     lastConnectAttemptElapsedMillis = 0L;
                 }
             }
@@ -343,7 +346,9 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
         } catch (GeneralSecurityException | IllegalArgumentException error) {
             synchronized (lock) {
                 configuration = null;
-                statusMessage = "Pairing could not be read: " + safeMessage(error);
+                statusMessage = getString(
+                        R.string.pairing_could_not_be_read,
+                        safeMessage(error));
             }
         }
         emitState();
@@ -365,7 +370,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 linkLossEpisodeActive = true;
                 linkLossEventPending = true;
                 connected = false;
-                statusMessage = "Boat heartbeat lost";
+                statusMessage = getString(R.string.boat_heartbeat_lost);
                 shouldAlarmForLoss = true;
                 stateChanged = true;
             }
@@ -374,7 +379,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                     || now - lastConnectAttemptElapsedMillis >= RECONNECT_INTERVAL_MILLIS)) {
                 connecting = true;
                 lastConnectAttemptElapsedMillis = now;
-                statusMessage = "Connecting to boat…";
+                statusMessage = getString(R.string.connecting_to_boat);
                 shouldConnect = true;
                 stateChanged = true;
             }
@@ -452,9 +457,11 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             lastConnectAttemptElapsedMillis = 0L;
             if (unpair) configuration = null;
             if (unpair) acknowledgedEventSequence = 0L;
-            statusMessage = unpair ? "Not paired" : "Monitoring stopped";
+            statusMessage = unpair
+                    ? getString(R.string.not_paired)
+                    : getString(R.string.monitoring_stopped);
             stoppedClient = client;
-            client = new AnchorSyncClient(this);
+            client = new AnchorSyncClient(this, this);
         }
         SharedPreferences.Editor preferenceChanges = preferences.edit()
                 .putBoolean(KEY_ENABLED, false)
@@ -478,7 +485,7 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
         synchronized (lock) {
             if (activeRemoteEvent != null) return activeRemoteEvent.reason;
             if (linkLossEventPending) {
-                return "Connection to the authoritative boat device has been lost for 30 seconds.";
+                return getString(R.string.boat_connection_lost_30_seconds);
             }
             return null;
         }
@@ -561,12 +568,13 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
             String reason = activeRemoteEvent != null
                     ? activeRemoteEvent.reason
                     : linkLossEventPending
-                    ? "Connection to the authoritative boat device has been lost for 30 seconds."
+                    ? getString(R.string.boat_connection_lost_30_seconds)
                     : null;
             return new ShoreMonitorState(
                     configuration != null,
                     monitoringEnabled,
                     connected,
+                    latestState != null,
                     isSoundReady(),
                     latestState != null && latestState.armed,
                     reason != null,
@@ -594,14 +602,14 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
     private void createNotificationChannels() {
         NotificationChannel monitor = new NotificationChannel(
                 MONITOR_CHANNEL,
-                "Shore anchor monitor",
+                getString(R.string.shore_anchor_monitor),
                 NotificationManager.IMPORTANCE_LOW);
-        monitor.setDescription("Keeps the read-only boat heartbeat monitor connected.");
+        monitor.setDescription(getString(R.string.shore_monitor_channel_description));
         NotificationChannel alarm = new NotificationChannel(
                 ALARM_CHANNEL,
-                "Shore anchor alarms",
+                getString(R.string.shore_anchor_alarms),
                 NotificationManager.IMPORTANCE_HIGH);
-        alarm.setDescription("Urgent boat alarm and connection-loss alerts.");
+        alarm.setDescription(getString(R.string.shore_alarm_channel_description));
         alarm.setSound(null, null);
         alarm.enableVibration(true);
         alarm.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -621,11 +629,13 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 this, 20, openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String text = state.connected
-                ? (state.armed ? "Boat anchor watch live" : "Boat watch is disarmed")
+                ? (state.armed
+                        ? getString(R.string.boat_anchor_watch_live)
+                        : getString(R.string.boat_watch_disarmed))
                 : state.statusMessage;
         return new Notification.Builder(this, MONITOR_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_location)
-                .setContentTitle("Shore anchor monitor")
+                .setContentTitle(getString(R.string.shore_anchor_monitor))
                 .setContentText(text)
                 .setContentIntent(open)
                 .setOngoing(true)
@@ -646,14 +656,15 @@ public final class ShoreMonitorService extends Service implements AnchorSyncClie
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, ALARM_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_location)
-                .setContentTitle("⚠ BOAT ANCHOR ALARM")
+                .setContentTitle(getString(R.string.boat_anchor_alarm_notification_title))
                 .setContentText(reason)
                 .setStyle(new Notification.BigTextStyle().bigText(reason))
                 .setContentIntent(open)
                 .setCategory(Notification.CATEGORY_ALARM)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setOngoing(true)
-                .addAction(new Notification.Action.Builder(null, "Silence here", silence).build())
+                .addAction(new Notification.Action.Builder(
+                        null, getString(R.string.silence_here), silence).build())
                 .build();
     }
 

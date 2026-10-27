@@ -1,14 +1,22 @@
 import SwiftUI
 
 struct ContentView: View {
-    private enum DashboardSection: String, CaseIterable, Identifiable {
-        case anchor = "Anchor"
-        case bridge = "NMEA Stream"
+    private enum DashboardSection: CaseIterable, Identifiable {
+        case anchor
+        case bridge
 
-        var id: String { rawValue }
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .anchor: String(localized: "Anchor")
+            case .bridge: String(localized: "NMEA Stream")
+            }
+        }
     }
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var controller = BridgeController()
     @StateObject private var purchaseStore = PurchaseStore()
     @State private var selectedSection = DashboardSection.anchor
@@ -40,6 +48,9 @@ struct ContentView: View {
             }
             .navigationTitle(
                 selectedSection == .anchor ? "Anchor Watch" : "NMEA Stream"
+            )
+            .navigationBarTitleDisplayMode(
+                dynamicTypeSize.isAccessibilitySize ? .inline : .large
             )
             .background(Color(uiColor: .systemGroupedBackground))
             .sheet(isPresented: $showingAnchorPairing) {
@@ -97,17 +108,30 @@ struct ContentView: View {
     }
 
     private var sectionSwitcher: some View {
-        HStack(spacing: 6) {
-            sectionButton(
-                .anchor,
-                active: controller.anchorAlarmArmed || controller.isLayingAnchor
-            )
-            sectionButton(.bridge, active: controller.isStreaming)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 6) {
+                    anchorSectionButton
+                    sectionButton(.bridge, active: controller.isStreaming)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    anchorSectionButton
+                    sectionButton(.bridge, active: controller.isStreaming)
+                }
+            }
         }
         .padding(4)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .contain)
+    }
+
+    private var anchorSectionButton: some View {
+        sectionButton(
+            .anchor,
+            active: controller.anchorAlarmArmed || controller.isLayingAnchor
+        )
     }
 
 #if DEBUG
@@ -138,8 +162,10 @@ struct ContentView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                Text(section.rawValue)
+                Text(section.title)
                     .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 if active {
                     Circle()
                         .fill(selectedSection == section ? Color.white : Color.green)
@@ -153,7 +179,9 @@ struct ContentView: View {
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityValue(active ? "Active" : "Inactive")
+        .accessibilityValue(
+            active ? String(localized: "Active") : String(localized: "Inactive")
+        )
     }
 
     private var bridgeDashboard: some View {
@@ -445,13 +473,16 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
 
-            radiusControl(title: "Alarm radius", adjustableWhileArmed: false)
+            radiusControl(
+                title: String(localized: "Alarm radius"),
+                adjustableWhileArmed: false
+            )
 
             if controller.anchorMode == .freeSwinging {
                 Divider()
                 workflowStep(
                     1,
-                    title: "Mark anchor position",
+                    title: String(localized: "Mark anchor position"),
                     detail: controller.anchorReferenceCoordinate == nil
                         ? "Do this while the boat is over the anchor."
                         : "Position recorded.",
@@ -459,7 +490,7 @@ struct ContentView: View {
                 )
                 workflowStep(
                     2,
-                    title: "Arm after paying out the rode",
+                    title: String(localized: "Arm after paying out the rode"),
                     detail: "The watch uses the marked point as its centre.",
                     complete: false
                 )
@@ -594,10 +625,16 @@ struct ContentView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
 
-            HStack {
-                Label("Reference", systemImage: "anchor.fill")
-                Spacer()
-                Text("\(controller.anchorTrackPoints.count) plotted fixes")
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("Reference", systemImage: "anchor.fill")
+                    Spacer()
+                    Text(anchorPlotSummary)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Reference", systemImage: "anchor.fill")
+                    Text(anchorPlotSummary)
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -676,8 +713,8 @@ struct ContentView: View {
 
     private func radiusHint(adjustableWhileArmed: Bool) -> String {
         if adjustableWhileArmed {
-            return "Adjustable while anchored • "
-                + "\(controller.formatDistance(controller.anchorMode.radiusStepMeters)) steps"
+            let step = controller.formatDistance(controller.anchorMode.radiusStepMeters)
+            return String(localized: "Adjustable while anchored • \(step) steps")
         }
         return controller.formatRadiusRange(for: controller.anchorMode)
     }
@@ -753,13 +790,13 @@ struct ContentView: View {
             .font(.subheadline)
 
             remoteProductButton(
-                title: "Monthly",
+                title: String(localized: "Monthly"),
                 price: purchaseStore.remoteMonthlyPrice,
                 productID: StoreProductIdentifiers.remoteMonthly,
                 highlighted: false
             )
             remoteProductButton(
-                title: "Annual · Best value",
+                title: String(localized: "Annual · Best value"),
                 price: purchaseStore.remoteAnnualPrice,
                 productID: StoreProductIdentifiers.remoteAnnual,
                 highlighted: true
@@ -832,7 +869,8 @@ struct ContentView: View {
         DisclosureGroup(isExpanded: $showingAnchorDetails) {
             VStack(alignment: .leading, spacing: 11) {
                 Divider()
-                if controller.anchorMode == .freeSwinging {
+                if controller.anchorMode == .freeSwinging
+                    || controller.anchorReferenceCoordinate != nil {
                     detailRow(
                         "Reference position",
                         controller.anchorReferenceDescription,
@@ -840,6 +878,7 @@ struct ContentView: View {
                     )
                     detailRow("Distance from reference", controller.anchorDistanceDescription)
                 }
+                detailRow("GPS accuracy", controller.accuracyDescription)
                 Text("A drift must remain outside the radius for 5 seconds. GPS loss alerts after 30 seconds; while locked, the alarm notification repeats every minute until silenced.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -999,9 +1038,9 @@ struct ContentView: View {
 
     private var anchorPurchaseButtonTitle: String {
         guard let price = purchaseStore.anchorWatchPrice else {
-            return "Loading App Store price…"
+            return String(localized: "Loading App Store price…")
         }
-        return "Unlock Anchor Watch · \(price)"
+        return String(localized: "Unlock Anchor Watch · \(price)")
     }
 
     private func statusHeader(_ title: String, color: Color) -> some View {
@@ -1121,9 +1160,13 @@ struct ContentView: View {
     }
 
     private var shoreMonitorStatus: String {
-        if !controller.shoreMonitorConnected { return "Not paired · Optional" }
-        if controller.shoreMonitorSoundReady { return "Connected · Sound ready" }
-        return controller.anchorAlarmArmed ? "Connected · Setup needed" : "Connected"
+        if !controller.shoreMonitorConnected {
+            return String(localized: "No shore monitor connected")
+        }
+        if controller.shoreMonitorSoundReady {
+            return String(localized: "Connected · Sound ready")
+        }
+        return String(localized: "Connected · Setup needed")
     }
 
     private var shoreMonitorSymbol: String {
@@ -1135,7 +1178,17 @@ struct ContentView: View {
     private var shoreMonitorColor: Color {
         if !controller.shoreMonitorConnected { return .secondary }
         if controller.shoreMonitorSoundReady { return .green }
-        return controller.anchorAlarmArmed ? .orange : .secondary
+        return .orange
+    }
+
+    private var anchorPlotSummary: String {
+        let count = controller.anchorTrackPoints.count
+        let plottedFixes = count == 1
+            ? String(localized: "1 plotted fix")
+            : String(localized: "\(count) plotted fixes")
+        return String(
+            localized: "\(plottedFixes) • GPS accuracy \(controller.accuracyDescription)"
+        )
     }
 }
 
@@ -1304,13 +1357,16 @@ private struct AnchorDriftPlot: View {
 
     private var accessibilityValue: String {
         guard let current = points.last else {
-            return "Waiting for GPS points. Alarm limit "
-                + "\(distanceFormatter.format(metres: limitMeters))."
+            let limit = distanceFormatter.format(metres: limitMeters)
+            return String(localized: "Waiting for GPS points. Alarm limit \(limit).")
         }
-        return "Current drift "
-            + "\(distanceFormatter.format(metres: hypot(current.eastMeters, current.northMeters), fractionDigits: 1)). "
-            + "Alarm limit \(distanceFormatter.format(metres: limitMeters)). "
-            + "\(points.count) GPS points plotted."
+        let drift = distanceFormatter.format(
+            metres: hypot(current.eastMeters, current.northMeters),
+            fractionDigits: 1
+        )
+        let limit = distanceFormatter.format(metres: limitMeters)
+        let accuracy = distanceFormatter.formatAccuracy(metres: current.accuracyMeters)
+        return String(localized: "Current drift \(drift). Alarm limit \(limit). GPS accuracy \(accuracy). \(points.count) GPS points plotted.")
     }
 
     private var distanceFormatter: DistanceDisplayFormatter {
@@ -1336,7 +1392,7 @@ private struct AnchorReadinessView: View {
 
                     VStack(alignment: .leading, spacing: 14) {
                         readinessRow(
-                            title: "Precise Location",
+                            title: String(localized: "Precise Location"),
                             detail: controller.preciseLocationReadinessDescription,
                             ready: controller.preciseLocationReady,
                             actionTitle: locationActionTitle,
@@ -1344,7 +1400,7 @@ private struct AnchorReadinessView: View {
                         )
                         Divider()
                         readinessRow(
-                            title: "Background Location",
+                            title: String(localized: "Background Location"),
                             detail: controller.backgroundLocationReadinessDescription,
                             ready: controller.backgroundLocationReady,
                             actionTitle: locationActionTitle,
@@ -1352,7 +1408,7 @@ private struct AnchorReadinessView: View {
                         )
                         Divider()
                         readinessRow(
-                            title: "Notifications and sound",
+                            title: String(localized: "Notifications and sound"),
                             detail: controller.notificationReadinessDescription,
                             ready: controller.notificationsReady,
                             actionTitle: notificationActionTitle,
@@ -1460,28 +1516,30 @@ private struct AnchorReadinessView: View {
     private var locationActionTitle: String {
         switch controller.authorizationStatus {
         case .notDetermined:
-            return "Allow Location"
+            return String(localized: "Allow Location")
         case .authorizedWhenInUse:
-            return "Allow in Background"
+            return String(localized: "Allow in Background")
         case .authorizedAlways:
-            return controller.preciseLocationReady ? "Enabled" : "Open Settings"
+            return controller.preciseLocationReady
+                ? String(localized: "Enabled")
+                : String(localized: "Open Settings")
         case .denied, .restricted:
-            return "Open Settings"
+            return String(localized: "Open Settings")
         @unknown default:
-            return "Open Settings"
+            return String(localized: "Open Settings")
         }
     }
 
     private var notificationActionTitle: String {
         switch controller.notificationAuthorizationStatus {
         case .notDetermined:
-            return "Allow Notifications"
+            return String(localized: "Allow Notifications")
         case .authorized, .provisional, .ephemeral:
-            return "Enabled"
+            return String(localized: "Enabled")
         case .denied:
-            return "Open Settings"
+            return String(localized: "Open Settings")
         @unknown default:
-            return "Open Settings"
+            return String(localized: "Open Settings")
         }
     }
 

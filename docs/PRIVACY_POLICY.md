@@ -1,12 +1,12 @@
-# Anchor Watch privacy policy draft
+# Anchor Watch privacy policy
 
-Effective date: `[EFFECTIVE_DATE]`
+Effective date: 20 August 2026
 
-Publisher: `[LEGAL_NAME]` (`we`, `us`)
+Publisher: Achieve Therapy Ltd (`we`, `us`), company number 09790834
 
-Contact: `[PRIVACY_EMAIL]` · `[POSTAL_ADDRESS]`
+Contact: `app@achievetherapy.co.uk` · Reading, United Kingdom
 
-Public URL when published: `https://[PUBLIC_DOMAIN]/anchor-watch/privacy`
+Public URL: `https://achievetherapy.co.uk/anchor-watch/privacy/`
 
 ## Summary
 
@@ -85,7 +85,7 @@ These are submission notes, not part of the public policy page.
 
 - Tracking: No.
 - Data collected by the developer or third-party partners through this app: No.
-- Privacy Policy URL: `https://[PUBLIC_DOMAIN]/anchor-watch/privacy`.
+- Privacy Policy URL: `https://achievetherapy.co.uk/anchor-watch/privacy/`.
 - User Privacy Choices URL: omit, or use the same privacy page if it explains local deletion.
 
 This answer depends on the final binary retaining the current no-backend/no-analytics design and on a final dependency audit.

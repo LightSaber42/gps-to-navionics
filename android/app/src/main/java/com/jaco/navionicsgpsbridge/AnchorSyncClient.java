@@ -1,5 +1,7 @@
 package com.jaco.navionicsgpsbridge;
 
+import android.content.Context;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -24,6 +26,7 @@ final class AnchorSyncClient {
     }
 
     private final Object lock = new Object();
+    private final Context context;
     private final Listener listener;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "anchor-sync-client");
@@ -38,7 +41,8 @@ final class AnchorSyncClient {
     private volatile boolean stopped;
     private Connection connection;
 
-    AnchorSyncClient(Listener listener) {
+    AnchorSyncClient(Context context, Listener listener) {
+        this.context = context.getApplicationContext();
         this.listener = listener;
     }
 
@@ -88,7 +92,7 @@ final class AnchorSyncClient {
             }
         }
         if (!stopped) listener.onDisconnected(lastError == null
-                ? "Boat device is unavailable."
+                ? context.getString(R.string.boat_device_unavailable)
                 : safeMessage(lastError));
     }
 
@@ -145,7 +149,8 @@ final class AnchorSyncClient {
                 if (connection == authenticated) connection = null;
             }
             close(socket);
-            if (!stopped) listener.onDisconnected("Boat heartbeat was lost.");
+            if (!stopped) listener.onDisconnected(
+                    context.getString(R.string.boat_heartbeat_was_lost));
         }
     }
 

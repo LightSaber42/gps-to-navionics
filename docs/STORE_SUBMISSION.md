@@ -10,7 +10,7 @@ Prepared for the English-only 2.0.0 release. Replace every bracketed value befor
 - Audience: adult boat owners and operators; not designed for children
 - Compatibility statement: **Compatible with Navionics Boating via NMEA. Anchor Watch is not affiliated with or endorsed by Navionics or Garmin.**
 - Public URLs:
-  - Privacy: `https://[PUBLIC_DOMAIN]/anchor-watch/privacy`
+  - Privacy: `https://achievetherapy.co.uk/anchor-watch/privacy/`
   - Support: `https://[PUBLIC_DOMAIN]/anchor-watch/support`
   - Terms: `https://[PUBLIC_DOMAIN]/anchor-watch/terms`
 
@@ -26,7 +26,7 @@ Prepared for the English-only 2.0.0 release. Replace every bracketed value befor
 - Keywords, 100-byte maximum: `boating,marine,gps,nmea,alarm,drift,moor,shore,monitor,navigation,sailing,position`
 - Support URL: `https://[PUBLIC_DOMAIN]/anchor-watch/support`
 - Marketing URL: `https://[PUBLIC_DOMAIN]/anchor-watch`
-- Privacy Policy URL: `https://[PUBLIC_DOMAIN]/anchor-watch/privacy`
+- Privacy Policy URL: `https://achievetherapy.co.uk/anchor-watch/privacy/`
 
 ### Description
 
@@ -112,7 +112,7 @@ Subscription group reference and display name: `Remote Anchor Watch`. Put monthl
 - Suggested tags, if offered by Play Console: Boating, Navigation
 - Contact email: `[SUPPORT_EMAIL]`
 - Contact website: `https://[PUBLIC_DOMAIN]/anchor-watch/support`
-- Privacy policy: `https://[PUBLIC_DOMAIN]/anchor-watch/privacy`
+- Privacy policy: `https://achievetherapy.co.uk/anchor-watch/privacy/`
 
 ### Full description
 

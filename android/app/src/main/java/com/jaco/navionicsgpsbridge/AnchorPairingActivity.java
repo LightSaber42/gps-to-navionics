@@ -102,13 +102,13 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 refreshPairingCode();
             }
             if (state.shoreMonitorConnected && state.shoreMonitorSoundReady) {
-                monitorStatusValue.setText("Connected · Sound ready");
+                monitorStatusValue.setText(R.string.connected_sound_ready);
                 monitorStatusValue.setTextColor(getColor(R.color.nav_success));
             } else if (state.shoreMonitorConnected) {
-                monitorStatusValue.setText("Connected · Setup needed");
+                monitorStatusValue.setText(R.string.connected_setup_needed);
                 monitorStatusValue.setTextColor(getColor(R.color.nav_warning));
             } else {
-                monitorStatusValue.setText("Not paired · Waiting for shore monitor");
+                monitorStatusValue.setText(R.string.not_paired_waiting_shore_monitor);
                 monitorStatusValue.setTextColor(getColor(R.color.nav_secondary));
             }
         });
@@ -137,11 +137,11 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
             }
         });
 
-        TextView title = text("Pair shore monitor", 28, R.color.nav_text);
+        TextView title = text(getString(R.string.pair_shore_monitor), 28, R.color.nav_text);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         page.addView(title, matchWrap());
         TextView subtitle = text(
-                "This boat device remains authoritative. The paired Android phone can view and silence only its own alarm.",
+                getString(R.string.pairing_authority_explanation),
                 15,
                 R.color.nav_secondary);
         LinearLayout.LayoutParams subtitleParams = matchWrap();
@@ -151,13 +151,13 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
 
         LinearLayout remoteAccessCard = warningCard();
         TextView remoteAccessTitle = text(
-                "Remote monitoring requires a VPN", 18, R.color.nav_warning);
+                getString(R.string.remote_monitoring_requires_vpn),
+                18,
+                R.color.nav_warning);
         remoteAccessTitle.setTypeface(Typeface.DEFAULT_BOLD);
         remoteAccessCard.addView(remoteAccessTitle, matchWrap());
         TextView remoteAccessHelp = text(
-                "Before pairing for remote use, install Tailscale on both phones, sign in to the same Tailscale network, and connect it. Pairing alone does not provide internet access. Without Tailscale or an equivalent VPN setup, monitoring works only on the same local network.",
-                14,
-                R.color.nav_text);
+                getString(R.string.remote_monitoring_vpn_help), 14, R.color.nav_text);
         LinearLayout.LayoutParams remoteAccessHelpParams = matchWrap();
         remoteAccessHelpParams.topMargin = dp(8);
         remoteAccessCard.addView(remoteAccessHelp, remoteAccessHelpParams);
@@ -166,7 +166,8 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         LinearLayout.LayoutParams remoteAccessStatusParams = matchWrap();
         remoteAccessStatusParams.topMargin = dp(10);
         remoteAccessCard.addView(remoteAccessStatusValue, remoteAccessStatusParams);
-        Button tailscaleSetup = button("Tailscale setup instructions", R.color.nav_blue_dark);
+        Button tailscaleSetup = button(
+                getString(R.string.tailscale_setup_instructions), R.color.nav_blue_dark);
         tailscaleSetup.setOnClickListener(view -> openTailscaleSetup());
         LinearLayout.LayoutParams tailscaleSetupParams = matchWrap();
         tailscaleSetupParams.topMargin = dp(12);
@@ -174,7 +175,10 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         page.addView(remoteAccessCard, cardParams());
 
         LinearLayout card = card();
-        monitorStatusValue = text("Not paired · Waiting for shore monitor", 14, R.color.nav_secondary);
+        monitorStatusValue = text(
+                getString(R.string.not_paired_waiting_shore_monitor),
+                14,
+                R.color.nav_secondary);
         monitorStatusValue.setTypeface(Typeface.DEFAULT_BOLD);
         monitorStatusValue.setGravity(Gravity.CENTER);
         card.addView(monitorStatusValue, matchWrap());
@@ -182,7 +186,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         qrView.setAdjustViewBounds(true);
         qrView.setMaxWidth(dp(310));
         qrView.setMaxHeight(dp(310));
-        qrView.setContentDescription("Shore-monitor pairing QR code");
+        qrView.setContentDescription(getString(R.string.shore_monitor_pairing_qr_code));
         LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -190,9 +194,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         qrParams.topMargin = dp(12);
         card.addView(qrView, qrParams);
         TextView instruction = text(
-                "On the Android shore phone, use Camera to scan this code, then tap the pairing link.",
-                15,
-                R.color.nav_text);
+                getString(R.string.scan_pairing_code_instruction), 15, R.color.nav_text);
         instruction.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams instructionParams = matchWrap();
         instructionParams.topMargin = dp(12);
@@ -207,7 +209,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         LinearLayout.LayoutParams errorParams = matchWrap();
         errorParams.topMargin = dp(8);
         card.addView(errorValue, errorParams);
-        Button share = button("Share pairing link", R.color.nav_blue);
+        Button share = button(getString(R.string.share_pairing_link), R.color.nav_blue);
         share.setOnClickListener(view -> sharePairingLink());
         LinearLayout.LayoutParams shareParams = matchWrap();
         shareParams.topMargin = dp(12);
@@ -216,7 +218,8 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
 
         LinearLayout options = card();
         options.setVisibility(View.GONE);
-        TextView manualTitle = text("Pairing link", 14, R.color.nav_secondary);
+        TextView manualTitle = text(
+                getString(R.string.pairing_link), 14, R.color.nav_secondary);
         manualTitle.setTypeface(Typeface.DEFAULT_BOLD);
         options.addView(manualTitle, matchWrap());
         pairingLinkValue = text("", 12, R.color.nav_secondary);
@@ -227,21 +230,23 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         linkParams.bottomMargin = dp(12);
         options.addView(pairingLinkValue, linkParams);
 
-        Button refresh = button("Refresh addresses", R.color.nav_blue_dark);
+        Button refresh = button(getString(R.string.refresh_addresses), R.color.nav_blue_dark);
         refresh.setOnClickListener(view -> refreshPairingCode());
         options.addView(refresh, matchWrap());
 
-        Button rotate = button("Replace paired monitor", R.color.nav_error);
+        Button rotate = button(getString(R.string.replace_paired_monitor), R.color.nav_error);
         LinearLayout.LayoutParams rotateParams = matchWrap();
         rotateParams.topMargin = dp(12);
         options.addView(rotate, rotateParams);
         rotate.setOnClickListener(view -> confirmRotate());
 
-        Button optionsToggle = disclosureButton("More options");
+        Button optionsToggle = disclosureButton(getString(R.string.more_options));
         optionsToggle.setOnClickListener(view -> {
             boolean expanded = options.getVisibility() == View.VISIBLE;
             options.setVisibility(expanded ? View.GONE : View.VISIBLE);
-            optionsToggle.setText(expanded ? "More options  ›" : "More options  ⌄");
+            optionsToggle.setText(expanded
+                    ? getString(R.string.more_options_collapsed)
+                    : getString(R.string.more_options_expanded));
         });
         page.addView(optionsToggle, cardParams());
         page.addView(options, cardParams());
@@ -262,18 +267,18 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
                 pairingUri = null;
                 pairingLinkValue.setText("");
                 qrView.setImageDrawable(null);
-                addressValue.setText("No LAN or Tailscale IPv4 address available");
-                errorValue.setText("Connect both phones to the same subnet or Tailscale, then refresh.");
-                remoteAccessStatusValue.setText(
-                        "No Tailscale address detected. This code would be local-network only.");
+                addressValue.setText(R.string.no_pairing_address_available);
+                errorValue.setText(R.string.connect_phones_then_refresh);
+                remoteAccessStatusValue.setText(R.string.no_tailscale_local_only);
                 remoteAccessStatusValue.setTextColor(getColor(R.color.nav_warning));
                 return;
             }
             pairingUri = pairingStore.pairingUri(configuration, addresses);
             pairingLinkValue.setText(pairingUri.toString());
             qrView.setImageBitmap(AnchorQrCode.bitmap(pairingUri.toString(), dp(310)));
-            StringBuilder addressText = new StringBuilder("Boat address");
-            if (addresses.size() > 1) addressText.append("es");
+            StringBuilder addressText = new StringBuilder(getResources().getQuantityString(
+                    R.plurals.boat_addresses,
+                    addresses.size()));
             addressText.append(": ");
             for (int index = 0; index < addresses.size(); index++) {
                 if (index > 0) addressText.append(", ");
@@ -283,14 +288,16 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
             boolean includesTailscaleAddress = addresses.stream()
                     .anyMatch(address -> address.address.startsWith("100."));
             remoteAccessStatusValue.setText(includesTailscaleAddress
-                    ? "Tailscale address included. Keep Tailscale connected on both phones."
-                    : "No Tailscale address detected. Unless another listed address is from your VPN, this code is local-network only.");
+                    ? R.string.tailscale_address_included
+                    : R.string.no_tailscale_unless_other_vpn);
             remoteAccessStatusValue.setTextColor(getColor(includesTailscaleAddress
                     ? R.color.nav_success : R.color.nav_warning));
             errorValue.setText("");
         } catch (GeneralSecurityException | WriterException error) {
             qrView.setImageDrawable(null);
-            errorValue.setText("Pairing code failed: " + error.getLocalizedMessage());
+            errorValue.setText(getString(
+                    R.string.pairing_code_failed,
+                    error.getLocalizedMessage()));
         }
     }
 
@@ -298,13 +305,12 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         pairingUri = null;
         if (pairingLinkValue != null) pairingLinkValue.setText("");
         if (qrView != null) qrView.setImageDrawable(null);
-        if (addressValue != null) addressValue.setText("Pairing unavailable");
+        if (addressValue != null) addressValue.setText(R.string.pairing_unavailable);
         if (errorValue != null) {
-            errorValue.setText(
-                    "Unlock Remote Anchor Watch on the boat phone to create or view a pairing code.");
+            errorValue.setText(R.string.unlock_remote_for_pairing);
         }
         if (monitorStatusValue != null) {
-            monitorStatusValue.setText("Remote Anchor Watch required");
+            monitorStatusValue.setText(R.string.remote_anchor_watch_required);
             monitorStatusValue.setTextColor(getColor(R.color.nav_warning));
         }
     }
@@ -314,8 +320,8 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
         Intent share = new Intent(Intent.ACTION_SEND)
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_TEXT, pairingUri.toString())
-                .putExtra(Intent.EXTRA_SUBJECT, "Anchor monitor pairing");
-        startActivity(Intent.createChooser(share, "Share pairing link"));
+                .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.anchor_monitor_pairing));
+        startActivity(Intent.createChooser(share, getString(R.string.share_pairing_link)));
     }
 
     private void openTailscaleSetup() {
@@ -324,10 +330,10 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
 
     private void confirmRotate() {
         new AlertDialog.Builder(this)
-                .setTitle("Invalidate current pairing?")
-                .setMessage("The shore phone will disconnect and must scan the new code.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Make new code", (dialog, which) -> {
+                .setTitle(R.string.invalidate_current_pairing_question)
+                .setMessage(R.string.invalidate_current_pairing_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.make_new_code, (dialog, which) -> {
                     if (binder == null || !binder.canUseRemoteAnchorWatch()) {
                         showRemoteAccessRequired();
                         return;
@@ -386,7 +392,7 @@ public final class AnchorPairingActivity extends Activity implements BridgeServi
 
     private Button disclosureButton(String title) {
         Button button = new Button(this);
-        button.setText(title + "  ›");
+        button.setText(getString(R.string.disclosure_collapsed, title));
         button.setTextSize(16);
         button.setTextColor(getColor(R.color.nav_text));
         button.setTypeface(Typeface.DEFAULT_BOLD);

@@ -9,9 +9,9 @@ enum DisplayUnitPreference: String, CaseIterable, Identifiable, Sendable, Hashab
 
     var displayName: String {
         switch self {
-        case .system: "System Default"
-        case .metres: "Metres"
-        case .feet: "Feet"
+        case .system: String(localized: "System Default")
+        case .metres: String(localized: "Metres")
+        case .feet: String(localized: "Feet")
         }
     }
 
@@ -28,7 +28,8 @@ enum DisplayUnitPreference: String, CaseIterable, Identifiable, Sendable, Hashab
 
     func detail(locale: Locale = .current) -> String {
         guard self == .system else { return displayName }
-        return "\(displayName) (\(resolvedUnit(locale: locale).displayName))"
+        let resolvedName = resolvedUnit(locale: locale).displayName
+        return String(localized: "\(displayName) (\(resolvedName))")
     }
 }
 
@@ -47,8 +48,8 @@ enum DisplayDistanceUnit: Sendable, Equatable {
 
     var displayName: String {
         switch self {
-        case .metres: "Metres"
-        case .feet: "Feet"
+        case .metres: String(localized: "Metres")
+        case .feet: String(localized: "Feet")
         }
     }
 
@@ -96,7 +97,7 @@ struct DistanceDisplayFormatter: Sendable {
     ) -> String {
         let minimum = number(metres: minimumMetres)
         let maximum = number(metres: maximumMetres)
-        return "\(minimum)–\(maximum) \(unit.symbol) range • "
-            + "\(format(metres: stepMetres)) steps"
+        let step = format(metres: stepMetres)
+        return String(localized: "\(minimum)–\(maximum) \(unit.symbol) range • \(step) steps")
     }
 }

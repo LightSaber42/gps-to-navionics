@@ -8,8 +8,8 @@ enum AnchorAlarmMode: String, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
-        case .shorelined: "Shorelined"
-        case .freeSwinging: "Free swinging"
+        case .shorelined: String(localized: "Shorelined")
+        case .freeSwinging: String(localized: "Free swinging")
         }
     }
 
@@ -49,9 +49,9 @@ enum AnchorAlarmMode: String, CaseIterable, Identifiable, Sendable {
     var setupDescription: String {
         switch self {
         case .shorelined:
-            "For a bow anchor with the stern tied ashore. Arming records the boat's current tied position and watches a tight circle around it."
+            String(localized: "For a bow anchor with the stern tied ashore. Arming records the boat's current tied position and watches a tight circle around it.")
         case .freeSwinging:
-            "For a boat free to swing. Tap Drop anchor at the anchor-drop point, then arm after paying out the rode."
+            String(localized: "For a boat free to swing. Tap Drop anchor at the anchor-drop point, then arm after paying out the rode.")
         }
     }
 }
@@ -97,11 +97,10 @@ enum AnchorGPSQuality {
             preference: .metres,
             locale: Locale(identifier: "en_US_POSIX")
         )
-        return "GPS precision is degraded (\(formatter.formatAccuracy(metres: accuracyMeters))) "
-            + "for a \(formatter.format(metres: radiusMeters)) alarm limit. With this fix, "
-            + "the conservative alarm needs about "
-            + "\(formatter.format(metres: radiusMeters + accuracyMeters)) of measured drift "
-            + "to confirm a breach. Give the boat phone a clearer view of the sky."
+        let accuracy = formatter.formatAccuracy(metres: accuracyMeters)
+        let limit = formatter.format(metres: radiusMeters)
+        let requiredDrift = formatter.format(metres: radiusMeters + accuracyMeters)
+        return String(localized: "GPS precision is degraded (\(accuracy)) for a \(limit) alarm limit. With this fix, the conservative alarm needs about \(requiredDrift) of measured drift to confirm a breach. Give the boat phone a clearer view of the sky.")
     }
 }
 

@@ -1,5 +1,7 @@
 package com.jaco.navionicsgpsbridge;
 
+import android.content.Context;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -19,6 +21,7 @@ final class NmeaTcpServer {
         void onClientCountChanged(int count);
     }
 
+    private final Context context;
     private final Listener listener;
     private final Map<Integer, Socket> clients = new ConcurrentHashMap<>();
     private final AtomicInteger nextClientId = new AtomicInteger();
@@ -30,7 +33,8 @@ final class NmeaTcpServer {
     private volatile boolean running;
     private volatile ServerSocket serverSocket;
 
-    NmeaTcpServer(Listener listener) {
+    NmeaTcpServer(Context context, Listener listener) {
+        this.context = context.getApplicationContext();
         this.listener = listener;
     }
 
@@ -39,7 +43,8 @@ final class NmeaTcpServer {
             return;
         }
         running = true;
-        listener.onListenerStateChanged("Starting TCP server…", null);
+        listener.onListenerStateChanged(
+                context.getString(R.string.starting_tcp_server), null);
         acceptExecutor.execute(() -> acceptConnections(port));
     }
 
@@ -53,7 +58,7 @@ final class NmeaTcpServer {
         }
         clients.clear();
         listener.onClientCountChanged(0);
-        listener.onListenerStateChanged("Stopped", null);
+        listener.onListenerStateChanged(context.getString(R.string.stopped), null);
     }
 
     void send(String payload) {
@@ -85,7 +90,8 @@ final class NmeaTcpServer {
                 closeQuietly(newServer);
                 return;
             }
-            listener.onListenerStateChanged("Listening on TCP port " + port, null);
+            listener.onListenerStateChanged(
+                    context.getString(R.string.listening_tcp_port, port), null);
 
             while (running) {
                 Socket socket = newServer.accept();
@@ -99,7 +105,9 @@ final class NmeaTcpServer {
         } catch (IOException error) {
             if (running) {
                 running = false;
-                listener.onListenerStateChanged("TCP server failed", error.getLocalizedMessage());
+                listener.onListenerStateChanged(
+                        context.getString(R.string.tcp_server_failed),
+                        error.getLocalizedMessage());
             }
         } finally {
             ServerSocket activeServer = serverSocket;

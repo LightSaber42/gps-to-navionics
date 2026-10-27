@@ -22,7 +22,13 @@ Place both Remote products in the same subscription group and at the same servic
 
 The two Remote choices are base plans under one subscription product. As on iOS, the boat app grants Remote access only together with Anchor Watch ownership.
 
-Before license testing, replace the empty `play_billing_public_key` string resource with the app's **Licensing & In-App Billing** public key from Play Console. The key is public verification material, not a signing secret. Android entitlement checks fail closed while it is absent. Never add an upload key, app-signing private key, service-account credential, purchase token, or pairing secret to the repository.
+The app-specific **Licensing & In-App Billing** public key from Play Console is stored in `play_billing_public_key`. The key is public verification material, not a signing secret. Android entitlement checks fail closed while it is absent. Never add an upload key, app-signing private key, service-account credential, purchase token, or pairing secret to the repository.
+
+## Android release signing
+
+Run `android/setup-play-upload-key.sh` once on the release Mac. It creates the upload keystore outside the repository and stores its generated password in the macOS login Keychain. Back up both the keystore and its password before enrolling in Play App Signing.
+
+Run `android/build-release.sh` to inject the signing values through process-local environment variables, build the release AAB, and verify its JAR signature. A direct `bundleRelease` invocation fails closed unless all four `ANCHOR_UPLOAD_*` environment variables are present.
 
 ## Ownership boundary
 

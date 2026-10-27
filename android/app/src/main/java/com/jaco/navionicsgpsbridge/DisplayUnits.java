@@ -12,16 +12,18 @@ final class DisplayUnits {
     private static final double FEET_PER_METRE = 3.280_839_895_013_123;
 
     enum Preference {
-        SYSTEM("system", "System Default"),
-        METRES("metres", "Metres"),
-        FEET("feet", "Feet");
+        SYSTEM("system", R.string.system_default, "System Default"),
+        METRES("metres", R.string.metres, "Metres"),
+        FEET("feet", R.string.feet, "Feet");
 
         final String storageValue;
-        final String displayName;
+        final int displayNameResource;
+        final String fallbackDisplayName;
 
-        Preference(String storageValue, String displayName) {
+        Preference(String storageValue, int displayNameResource, String fallbackDisplayName) {
             this.storageValue = storageValue;
-            this.displayName = displayName;
+            this.displayNameResource = displayNameResource;
+            this.fallbackDisplayName = fallbackDisplayName;
         }
 
         static Preference fromStorageValue(String value) {
@@ -33,30 +35,38 @@ final class DisplayUnits {
     }
 
     enum Unit {
-        METRES("m", "Metres"),
-        FEET("ft", "Feet");
+        METRES("m", R.string.metres, "Metres"),
+        FEET("ft", R.string.feet, "Feet");
 
         final String symbol;
-        final String displayName;
+        final int displayNameResource;
+        final String fallbackDisplayName;
 
-        Unit(String symbol, String displayName) {
+        Unit(String symbol, int displayNameResource, String fallbackDisplayName) {
             this.symbol = symbol;
-            this.displayName = displayName;
+            this.displayNameResource = displayNameResource;
+            this.fallbackDisplayName = fallbackDisplayName;
         }
     }
 
     final Preference preference;
     final Unit unit;
+    private final Context context;
     private final Locale locale;
 
     DisplayUnits(Preference preference, Locale locale) {
+        this(null, preference, locale);
+    }
+
+    DisplayUnits(Context context, Preference preference, Locale locale) {
+        this.context = context;
         this.preference = preference;
         this.locale = locale;
         unit = resolvedUnit(preference, locale);
     }
 
     static DisplayUnits load(Context context) {
-        return new DisplayUnits(loadPreference(context), Locale.getDefault());
+        return new DisplayUnits(context, loadPreference(context), Locale.getDefault());
     }
 
     static Preference loadPreference(Context context) {
@@ -80,8 +90,12 @@ final class DisplayUnits {
     }
 
     String preferenceDetail() {
-        if (preference != Preference.SYSTEM) return preference.displayName;
-        return preference.displayName + " (" + unit.displayName + ")";
+        String preferenceName = displayName(preference);
+        if (preference != Preference.SYSTEM) return preferenceName;
+        String unitName = displayName(unit);
+        return context == null
+                ? preferenceName + " (" + unitName + ")"
+                : context.getString(R.string.system_default_detail, preferenceName, unitName);
     }
 
     String format(double metres) {
@@ -105,8 +119,29 @@ final class DisplayUnits {
     }
 
     String range(double minimumMetres, double maximumMetres, double stepMetres) {
-        return number(minimumMetres, 0) + "–" + number(maximumMetres, 0)
-                + " " + unit.symbol + " range • " + format(stepMetres) + " steps";
+        String minimum = number(minimumMetres, 0);
+        String maximum = number(maximumMetres, 0);
+        String step = format(stepMetres);
+        return context == null
+                ? minimum + "–" + maximum + " " + unit.symbol + " range • " + step + " steps"
+                : context.getString(
+                        R.string.distance_range,
+                        minimum,
+                        maximum,
+                        unit.symbol,
+                        step);
+    }
+
+    private String displayName(Preference value) {
+        return context == null
+                ? value.fallbackDisplayName
+                : context.getString(value.displayNameResource);
+    }
+
+    private String displayName(Unit value) {
+        return context == null
+                ? value.fallbackDisplayName
+                : context.getString(value.displayNameResource);
     }
 
     private static SharedPreferences preferences(Context context) {

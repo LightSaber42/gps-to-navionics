@@ -12,7 +12,7 @@ final class BridgeController: NSObject, ObservableObject,
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var latestLocation: CLLocation?
     @Published private(set) var connectedClientCount = 0
-    @Published private(set) var listenerDescription = "Stopped"
+    @Published private(set) var listenerDescription = String(localized: "Stopped")
     @Published private(set) var networkAddresses: [NetworkAddress] = []
     @Published private(set) var lastSentences = ""
     @Published private(set) var lastError: String?
@@ -213,23 +213,25 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     var statusTitle: String {
-        guard isStreaming else { return "Stopped" }
+        guard isStreaming else { return String(localized: "Stopped") }
 
         switch authorizationStatus {
         case .denied, .restricted:
-            return "Location permission needed"
+            return String(localized: "Location permission needed")
         case .notDetermined:
-            return "Waiting for permission"
+            return String(localized: "Waiting for permission")
         default:
             break
         }
 
-        guard let latestLocation else { return "Acquiring GPS fix" }
+        guard let latestLocation else { return String(localized: "Acquiring GPS fix") }
         guard fixAge(for: latestLocation) <= Self.staleFixSeconds else {
-            return "GPS fix is stale"
+            return String(localized: "GPS fix is stale")
         }
-        guard connectedClientCount > 0 else { return "Waiting for a navigation app" }
-        return "Streaming NMEA"
+        guard connectedClientCount > 0 else {
+            return String(localized: "Waiting for a navigation app")
+        }
+        return String(localized: "Streaming NMEA")
     }
 
     var statusColorName: String {
@@ -240,17 +242,21 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     var anchorStatusTitle: String {
-        if anchorAlarmTriggered { return "ANCHOR ALARM" }
-        if anchorAlarmSilenced { return "Alarm silenced • still monitoring" }
-        if anchorAlarmArmed { return "Armed • \(anchorMode.displayName)" }
+        if anchorAlarmTriggered { return String(localized: "ANCHOR ALARM") }
+        if anchorAlarmSilenced {
+            return String(localized: "Alarm silenced • still monitoring")
+        }
+        if anchorAlarmArmed {
+            return String(localized: "Armed • \(anchorMode.displayName)")
+        }
         if isLayingAnchor, anchorReferenceCoordinate == nil {
-            return "Acquiring anchor position"
+            return String(localized: "Acquiring anchor position")
         }
-        if isLayingAnchor { return "Laying anchor" }
+        if isLayingAnchor { return String(localized: "Laying anchor") }
         if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
-            return "Record the anchor position"
+            return String(localized: "Record the anchor position")
         }
-        return "Anchor alarm ready"
+        return String(localized: "Anchor alarm ready")
     }
 
     var anchorStatusColorName: String {
@@ -263,33 +269,38 @@ final class BridgeController: NSObject, ObservableObject,
     }
 
     var anchorPrimaryButtonTitle: String {
-        if anchorAlarmArmed { return "Disarm anchor alarm" }
-        if isAcquiringAnchorReference { return "Acquiring GPS position…" }
-        if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
-            return "Drop anchor"
+        if anchorAlarmArmed { return String(localized: "Disarm anchor alarm") }
+        if isAcquiringAnchorReference {
+            return String(localized: "Acquiring GPS position…")
         }
-        return "Arm anchor alarm"
+        if anchorMode == .freeSwinging, anchorReferenceCoordinate == nil {
+            return String(localized: "Drop anchor")
+        }
+        return String(localized: "Arm anchor alarm")
     }
 
     var anchorReferenceDescription: String {
-        guard let coordinate = anchorReferenceCoordinate else { return "Not set" }
+        guard let coordinate = anchorReferenceCoordinate else {
+            return String(localized: "Not set")
+        }
         return String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude)
     }
 
     var anchorDistanceDescription: String {
         guard let anchorDistanceMeters else { return "—" }
-        return "\(formatDistance(anchorDistanceMeters, fractionDigits: 1)) / "
-            + "\(formatDistance(anchorRadiusMeters)) limit"
+        let distance = formatDistance(anchorDistanceMeters, fractionDigits: 1)
+        let limit = formatDistance(anchorRadiusMeters)
+        return String(localized: "\(distance) / \(limit) limit")
     }
 
     var authorizationDescription: String {
         switch authorizationStatus {
-        case .notDetermined: return "Not requested"
-        case .restricted: return "Restricted"
-        case .denied: return "Denied"
-        case .authorizedAlways: return "Always"
-        case .authorizedWhenInUse: return "While Using"
-        @unknown default: return "Unknown"
+        case .notDetermined: return String(localized: "Not requested")
+        case .restricted: return String(localized: "Restricted")
+        case .denied: return String(localized: "Denied")
+        case .authorizedAlways: return String(localized: "Always")
+        case .authorizedWhenInUse: return String(localized: "While Using")
+        @unknown default: return String(localized: "Unknown")
         }
     }
 
@@ -333,39 +344,39 @@ final class BridgeController: NSObject, ObservableObject,
     var preciseLocationReadinessDescription: String {
         if !preciseLocationReady {
             return authorizationStatus == .denied || authorizationStatus == .restricted
-                ? "Enable Precise Location in Settings"
-                : "Precise Location is required"
+                ? String(localized: "Enable Precise Location in Settings")
+                : String(localized: "Precise Location is required")
         }
-        return "Precise Location enabled"
+        return String(localized: "Precise Location enabled")
     }
 
     var backgroundLocationReadinessDescription: String {
         switch authorizationStatus {
         case .authorizedAlways:
-            return "Always Allow enabled"
+            return String(localized: "Always Allow enabled")
         case .authorizedWhenInUse:
-            return "Change permission to Always Allow"
+            return String(localized: "Change permission to Always Allow")
         case .notDetermined:
-            return "Location permission not requested"
+            return String(localized: "Location permission not requested")
         case .denied, .restricted:
-            return "Background location unavailable"
+            return String(localized: "Background location unavailable")
         @unknown default:
-            return "Location permission unavailable"
+            return String(localized: "Location permission unavailable")
         }
     }
 
     var notificationReadinessDescription: String {
         switch notificationAuthorizationStatus {
         case .authorized:
-            return "Alerts and sound authorized"
+            return String(localized: "Alerts and sound authorized")
         case .provisional, .ephemeral:
-            return "Notifications authorized provisionally"
+            return String(localized: "Notifications authorized provisionally")
         case .notDetermined:
-            return "Notification permission not requested"
+            return String(localized: "Notification permission not requested")
         case .denied:
-            return "Enable notifications and sound in Settings"
+            return String(localized: "Enable notifications and sound in Settings")
         @unknown default:
-            return "Notification status unavailable"
+            return String(localized: "Notification status unavailable")
         }
     }
 
@@ -466,9 +477,9 @@ final class BridgeController: NSObject, ObservableObject,
         case .authorizedAlways, .authorizedWhenInUse:
             updateLocationMonitoring()
         case .denied, .restricted:
-            lastError = "Enable Precise Location in Settings to transmit a usable marine position."
+            lastError = String(localized: "Enable Precise Location in Settings to transmit a usable marine position.")
         @unknown default:
-            lastError = "The current location authorization state is unsupported."
+            lastError = String(localized: "The current location authorization state is unsupported.")
         }
     }
 
@@ -477,7 +488,7 @@ final class BridgeController: NSObject, ObservableObject,
         server.stop()
         UIApplication.shared.isIdleTimerDisabled = false
         connectedClientCount = 0
-        listenerDescription = "Stopped"
+        listenerDescription = String(localized: "Stopped")
         isStreaming = false
         updateIdleTimer()
         updateMonitorTimer()
@@ -537,7 +548,7 @@ final class BridgeController: NSObject, ObservableObject,
         if anchorAlarmArmed {
             disarmAnchorAlarm()
         } else if !hasCurrentAnchorEntitlement {
-            anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
+            anchorActionMessage = String(localized: "Unlock Anchor Watch before starting a new watch.")
         } else if isLayingAnchor {
             guard anchorReferenceCoordinate != nil else { return }
             guard ensureReadinessBeforeArming() else { return }
@@ -554,7 +565,7 @@ final class BridgeController: NSObject, ObservableObject,
         guard hasCurrentAnchorEntitlement,
               !anchorAlarmArmed,
               anchorMode == .freeSwinging else {
-            anchorActionMessage = "Unlock Anchor Watch before recording an anchor position."
+            anchorActionMessage = String(localized: "Unlock Anchor Watch before recording an anchor position.")
             return
         }
         isLayingAnchor = true
@@ -573,7 +584,7 @@ final class BridgeController: NSObject, ObservableObject,
               !anchorAlarmArmed,
               anchorReferenceCoordinate != nil else {
             if !hasCurrentAnchorEntitlement {
-                anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
+                anchorActionMessage = String(localized: "Unlock Anchor Watch before starting a new watch.")
             }
             return
         }
@@ -603,7 +614,7 @@ final class BridgeController: NSObject, ObservableObject,
         anchorEventLog.acknowledgeLocally()
         anchorAlarmTriggered = false
         anchorAlarmSilenced = true
-        anchorAlertReason = "Alarm silenced — monitoring continues until the boat is back inside the limit."
+        anchorAlertReason = String(localized: "Alarm silenced — monitoring continues until the boat is back inside the limit.")
         breachStartedAt = nil
         stopAlarmAudio()
         cancelAlarmNotifications()
@@ -639,7 +650,7 @@ final class BridgeController: NSObject, ObservableObject,
 
     func rotateAnchorPairing() {
         guard canUseRemoteAnchorWatch else {
-            lastError = "Remote Anchor Watch is required to create a pairing code."
+            lastError = String(localized: "Remote Anchor Watch is required to create a pairing code.")
             return
         }
         do {
@@ -651,7 +662,7 @@ final class BridgeController: NSObject, ObservableObject,
             shoreMonitorSoundReady = false
             updateAnchorPairingURL()
         } catch {
-            lastError = "A new pairing code could not be created: \(error.localizedDescription)"
+            lastError = String(localized: "A new pairing code could not be created: \(error.localizedDescription)")
         }
     }
 
@@ -708,7 +719,7 @@ final class BridgeController: NSObject, ObservableObject,
                 )
                 await refreshAnchorReadiness()
             } catch {
-                lastError = "Anchor alarm notifications could not be enabled: \(error.localizedDescription)"
+                lastError = String(localized: "Anchor alarm notifications could not be enabled: \(error.localizedDescription)")
             }
         }
     }
@@ -779,16 +790,16 @@ final class BridgeController: NSObject, ObservableObject,
         case .denied, .restricted:
             locationUpdatesActive = false
             manager.stopUpdatingLocation()
-            lastError = "Enable Precise Location in Settings for GPS streaming and the anchor alarm."
+            lastError = String(localized: "Enable Precise Location in Settings for GPS streaming and the anchor alarm.")
             if isLayingAnchor {
-                anchorActionMessage = "Enable Precise Location in Settings to record the anchor position."
+                anchorActionMessage = String(localized: "Enable Precise Location in Settings to record the anchor position.")
             } else {
                 pendingAnchorAction = nil
                 pendingAnchorActionStartedAt = nil
             }
             if anchorAlarmArmed {
                 triggerAnchorAlarm(
-                    reason: "Location permission is unavailable, so the anchor position cannot be monitored.",
+                    reason: String(localized: "Location permission is unavailable, so the anchor position cannot be monitored."),
                     kind: "location_unavailable"
                 )
             }
@@ -870,25 +881,25 @@ final class BridgeController: NSObject, ObservableObject,
         guard hasCurrentAnchorEntitlement else {
             pendingAnchorAction = nil
             pendingAnchorActionStartedAt = nil
-            anchorActionMessage = "Unlock Anchor Watch before starting a new watch."
+            anchorActionMessage = String(localized: "Unlock Anchor Watch before starting a new watch.")
             return
         }
         pendingAnchorAction = action
         if actionRequiresNewAnchorReference(action) {
             pendingAnchorActionStartedAt = Date()
-            anchorActionMessage = "Acquiring a new GPS position…"
+            anchorActionMessage = String(localized: "Acquiring a new GPS position…")
         } else {
             pendingAnchorActionStartedAt = nil
         }
         switch authorizationStatus {
         case .notDetermined:
-            anchorActionMessage = "Allow Precise Location, then wait for a fresh GPS fix."
+            anchorActionMessage = String(localized: "Allow Precise Location, then wait for a fresh GPS fix.")
             locationManager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
             updateLocationMonitoring()
             tryCompletePendingAnchorAction()
         case .denied, .restricted:
-            anchorActionMessage = "Enable Precise Location in Settings before using the anchor alarm."
+            anchorActionMessage = String(localized: "Enable Precise Location in Settings before using the anchor alarm.")
             if !isLayingAnchor {
                 pendingAnchorAction = nil
                 pendingAnchorActionStartedAt = nil
@@ -896,7 +907,7 @@ final class BridgeController: NSObject, ObservableObject,
         @unknown default:
             pendingAnchorAction = nil
             pendingAnchorActionStartedAt = nil
-            anchorActionMessage = "The current location authorization state is unsupported."
+            anchorActionMessage = String(localized: "The current location authorization state is unsupported.")
         }
     }
 
@@ -905,27 +916,27 @@ final class BridgeController: NSObject, ObservableObject,
         guard hasCurrentAnchorEntitlement else {
             pendingAnchorAction = nil
             pendingAnchorActionStartedAt = nil
-            anchorActionMessage = "Anchor Watch access is required before this watch can start."
+            anchorActionMessage = String(localized: "Anchor Watch access is required before this watch can start.")
             return
         }
         guard let latestLocation,
               latestLocation.horizontalAccuracy >= 0,
               fixAge(for: latestLocation) <= Self.staleFixSeconds else {
-            anchorActionMessage = "Acquiring a fresh GPS position…"
+            anchorActionMessage = String(localized: "Acquiring a fresh GPS position…")
             return
         }
 
         if actionRequiresNewAnchorReference(action) {
             guard let startedAt = pendingAnchorActionStartedAt,
                   latestLocation.timestamp > startedAt else {
-                anchorActionMessage = "Acquiring a new GPS position…"
+                anchorActionMessage = String(localized: "Acquiring a new GPS position…")
                 return
             }
             guard latestLocation.horizontalAccuracy
                     <= Self.maximumAnchorReferenceAccuracyMeters else {
-                anchorActionMessage = "Improving GPS accuracy… currently "
-                    + "\(formatAccuracy(latestLocation.horizontalAccuracy)); need "
-                    + "\(formatAccuracy(Self.maximumAnchorReferenceAccuracyMeters))."
+                let currentAccuracy = formatAccuracy(latestLocation.horizontalAccuracy)
+                let requiredAccuracy = formatAccuracy(Self.maximumAnchorReferenceAccuracyMeters)
+                anchorActionMessage = String(localized: "Improving GPS accuracy… currently \(currentAccuracy); need \(requiredAccuracy).")
                 return
             }
         }
@@ -936,7 +947,7 @@ final class BridgeController: NSObject, ObservableObject,
         case .mark:
             anchorReferenceCoordinate = latestLocation.coordinate
             anchorDistanceMeters = 0
-            anchorActionMessage = "Anchor-drop position recorded. Arm after paying out the rode."
+            anchorActionMessage = String(localized: "Anchor-drop position recorded. Arm after paying out the rode.")
             appendAnchorTrackPoint(latestLocation, relativeTo: latestLocation.coordinate)
             persistAnchorConfiguration()
             updateLocationMonitoring()
@@ -945,13 +956,13 @@ final class BridgeController: NSObject, ObservableObject,
             guard anchorReadinessComplete else {
                 pendingAnchorAction = nil
                 pendingAnchorActionStartedAt = nil
-                anchorActionMessage = "Complete the safety readiness check before arming."
+                anchorActionMessage = String(localized: "Complete the safety readiness check before arming.")
                 presentAnchorReadiness(resumeArming: true)
                 updateLocationMonitoring()
                 return
             }
             guard anchorMode == .shorelined || anchorReferenceCoordinate != nil else {
-                anchorActionMessage = "Record the anchor-drop position before arming free-swinging mode."
+                anchorActionMessage = String(localized: "Record the anchor-drop position before arming free-swinging mode.")
                 updateLocationMonitoring()
                 return
             }
@@ -969,7 +980,7 @@ final class BridgeController: NSObject, ObservableObject,
                     at: Date()
                   ),
                   sessionLeaseStore.save(lease) else {
-                anchorActionMessage = "Anchor Watch access could not be saved safely. Try arming again."
+                anchorActionMessage = String(localized: "Anchor Watch access could not be saved safely. Try arming again.")
                 updateLocationMonitoring()
                 return
             }
@@ -1122,14 +1133,13 @@ final class BridgeController: NSObject, ObservableObject,
         let reason: String
         switch anchorMode {
         case .shorelined:
-            reason = "Boat moved "
-                + "\(formatDistance(assessment.distanceMeters, fractionDigits: 1)) "
-                + "from the shore-tied position "
-                + "(limit \(formatDistance(anchorRadiusMeters)))."
+            let distance = formatDistance(assessment.distanceMeters, fractionDigits: 1)
+            let limit = formatDistance(anchorRadiusMeters)
+            reason = String(localized: "Boat moved \(distance) from the shore-tied position (limit \(limit)).")
         case .freeSwinging:
-            reason = "Boat moved "
-                + "\(formatDistance(assessment.distanceMeters, fractionDigits: 1)) "
-                + "from the anchor (swing limit \(formatDistance(anchorRadiusMeters)))."
+            let distance = formatDistance(assessment.distanceMeters, fractionDigits: 1)
+            let limit = formatDistance(anchorRadiusMeters)
+            reason = String(localized: "Boat moved \(distance) from the anchor (swing limit \(limit)).")
         }
         breachEventIssued = true
         triggerAnchorAlarm(reason: reason, kind: "drift")
@@ -1149,7 +1159,7 @@ final class BridgeController: NSObject, ObservableObject,
             guard !lostFixEventIssued else { return }
             lostFixEventIssued = true
             triggerAnchorAlarm(
-                reason: String(format: "GPS position has been unavailable for %.0f seconds.", age),
+                reason: String(localized: "GPS position has been unavailable for \(Int(age.rounded())) seconds."),
                 kind: "gps_unavailable"
             )
         } else {
@@ -1171,13 +1181,13 @@ final class BridgeController: NSObject, ObservableObject,
         if percent <= 10, !criticalBatteryEventIssued {
             criticalBatteryEventIssued = true
             triggerAnchorAlarm(
-                reason: "The authoritative boat phone battery is critical at \(percent)% and is not charging.",
+                reason: String(localized: "The authoritative boat phone battery is critical at \(percent)% and is not charging."),
                 kind: "battery_critical"
             )
         } else if percent <= 20, !lowBatteryEventIssued {
             lowBatteryEventIssued = true
             triggerAnchorAlarm(
-                reason: "The authoritative boat phone battery is low at \(percent)% and is not charging.",
+                reason: String(localized: "The authoritative boat phone battery is low at \(percent)% and is not charging."),
                 kind: "battery_low"
             )
         }
@@ -1241,7 +1251,7 @@ final class BridgeController: NSObject, ObservableObject,
             player.play()
             alarmAudioPlayer = player
         } catch {
-            lastError = "The in-app alarm siren could not start: \(error.localizedDescription)"
+            lastError = String(localized: "The in-app alarm siren could not start: \(error.localizedDescription)")
         }
     }
 
@@ -1307,12 +1317,12 @@ final class BridgeController: NSObject, ObservableObject,
     private func registerAlarmNotificationCategory() {
         let silence = UNNotificationAction(
             identifier: Self.silenceActionIdentifier,
-            title: "Silence",
+            title: String(localized: "Silence"),
             options: []
         )
         let disarm = UNNotificationAction(
             identifier: Self.disarmActionIdentifier,
-            title: "Disarm",
+            title: String(localized: "Disarm"),
             options: [.destructive]
         )
         let category = UNNotificationCategory(
@@ -1332,10 +1342,10 @@ final class BridgeController: NSObject, ObservableObject,
                     options: [.alert, .sound, .badge]
                 )
                 if !granted {
-                    lastError = "Enable notifications and sound in Settings so the anchor alarm can wake you."
+                    lastError = String(localized: "Enable notifications and sound in Settings so the anchor alarm can wake you.")
                 }
             } catch {
-                lastError = "Anchor alarm notifications could not be enabled: \(error.localizedDescription)"
+                lastError = String(localized: "Anchor alarm notifications could not be enabled: \(error.localizedDescription)")
             }
         }
     }
@@ -1362,7 +1372,7 @@ final class BridgeController: NSObject, ObservableObject,
 
     private func alarmNotificationContent(reason: String) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "⚠ ANCHOR ALARM"
+        content.title = String(localized: "⚠ ANCHOR ALARM")
         content.body = reason
         content.sound = .default
         content.categoryIdentifier = Self.alarmCategoryIdentifier
@@ -1445,7 +1455,7 @@ final class BridgeController: NSObject, ObservableObject,
         anchorReferenceCoordinate = nil
         defaults.set(false, forKey: DefaultsKey.armed)
         defaults.set(false, forKey: DefaultsKey.hasReference)
-        lastError = "The previous anchor watch could not be resumed safely. Arm a new watch."
+        lastError = String(localized: "The previous anchor watch could not be resumed safely. Arm a new watch.")
     }
 
     private func reconcileAnchorSyncServer() {
@@ -1467,7 +1477,7 @@ final class BridgeController: NSObject, ObservableObject,
             anchorSyncServer.start(pairingKey: configuration.pairingKey)
             updateAnchorPairingURL()
         } catch {
-            lastError = "Secure shore-monitor pairing could not be initialized: \(error.localizedDescription)"
+            lastError = String(localized: "Secure shore-monitor pairing could not be initialized: \(error.localizedDescription)")
             anchorPairingURL = nil
         }
     }
@@ -1538,13 +1548,13 @@ final class BridgeController: NSObject, ObservableObject,
     private func handleServerState(_ state: NMEATCPServer.ListenerState) {
         switch state {
         case .stopped:
-            listenerDescription = "Stopped"
+            listenerDescription = String(localized: "Stopped")
         case .starting:
-            listenerDescription = "Starting TCP server…"
+            listenerDescription = String(localized: "Starting TCP server…")
         case .ready(let port):
-            listenerDescription = "Listening on TCP port \(port)"
+            listenerDescription = String(localized: "Listening on TCP port \(port)")
         case .failed(let message):
-            listenerDescription = "TCP server failed"
+            listenerDescription = String(localized: "TCP server failed")
             lastError = message
         }
     }

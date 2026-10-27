@@ -1,5 +1,7 @@
 package com.jaco.navionicsgpsbridge;
 
+import android.content.Context;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -28,6 +30,7 @@ final class AnchorSyncServer {
     }
 
     private final Object lock = new Object();
+    private final Context context;
     private final Listener listener;
     private final ExecutorService workers = Executors.newCachedThreadPool(task -> {
         Thread thread = new Thread(task, "anchor-sync-server-worker");
@@ -48,7 +51,8 @@ final class AnchorSyncServer {
     private AnchorSyncProtocol.State latestState;
     private AnchorHistoryStore historyStore;
 
-    AnchorSyncServer(Listener listener) {
+    AnchorSyncServer(Context context, Listener listener) {
+        this.context = context.getApplicationContext();
         this.listener = listener;
     }
 
@@ -60,7 +64,7 @@ final class AnchorSyncServer {
             running = true;
         }
         workers.execute(this::acceptLoop);
-        heartbeat.scheduleAtFixedRate(
+        heartbeat.scheduleWithFixedDelay(
                 this::sendStateNow,
                 AnchorSyncProtocol.HEARTBEAT_MILLIS,
                 AnchorSyncProtocol.HEARTBEAT_MILLIS,
@@ -123,7 +127,9 @@ final class AnchorSyncServer {
                 workers.execute(() -> handle(socket));
             }
         } catch (IOException error) {
-            if (running) reportError("Shore-monitor listener failed: " + safeMessage(error));
+            if (running) reportError(context.getString(
+                    R.string.shore_monitor_listener_failed,
+                    safeMessage(error)));
         } finally {
             serverSocket = null;
         }

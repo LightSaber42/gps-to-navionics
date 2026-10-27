@@ -1,0 +1,732 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "%@ / %@ limit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ / %2$@ limit"
+          }
+        }
+      }
+    },
+    "%@ • GPS accuracy %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ • GPS accuracy %2$@"
+          }
+        }
+      }
+    },
+    "%@ limit" : {
+
+    },
+    "%@ link pending release configuration" : {
+
+    },
+    "%@–%@ %@ range • %@ steps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@–%2$@ %3$@ range • %4$@ steps"
+          }
+        }
+      }
+    },
+    "%lld plotted fixes" : {
+
+    },
+    "1 plotted fix" : {
+
+    },
+    "A drift must remain outside the radius for 5 seconds. GPS loss alerts after 30 seconds; while locked, the alarm notification repeats every minute until silenced." : {
+
+    },
+    "A new pairing code could not be created: %@" : {
+
+    },
+    "A notification cannot guarantee sound while the iPhone is muted or in Focus. Test the phone in the conditions you will use aboard." : {
+
+    },
+    "ANCHOR ALARM" : {
+
+    },
+    "Acquiring GPS fix" : {
+
+    },
+    "Acquiring GPS position…" : {
+
+    },
+    "Acquiring a fresh GPS position…" : {
+
+    },
+    "Acquiring a new GPS position…" : {
+
+    },
+    "Acquiring anchor position" : {
+
+    },
+    "Acquiring anchor position…" : {
+
+    },
+    "Action required" : {
+
+    },
+    "Active" : {
+
+    },
+    "Add Remote Anchor Watch" : {
+
+    },
+    "Add a separate Android phone for read-only remote status, durable alarm replay, and connection-loss alerts." : {
+
+    },
+    "Adjustable while anchored • %@ steps" : {
+
+    },
+    "After force-quitting or restarting this iPhone, reopen the app and re-arm the watch. Test alarm sound with your mute and Focus settings before relying on it." : {
+
+    },
+    "Alarm radius" : {
+
+    },
+    "Alarm silenced — monitoring continues until the boat is back inside the limit." : {
+
+    },
+    "Alarm silenced • still monitoring" : {
+
+    },
+    "Alarm sound test" : {
+
+    },
+    "Alerts and sound authorized" : {
+
+    },
+    "Allow Location" : {
+
+    },
+    "Allow Notifications" : {
+
+    },
+    "Allow Precise Location, then wait for a fresh GPS fix." : {
+
+    },
+    "Allow in Background" : {
+
+    },
+    "Always" : {
+
+    },
+    "Always Allow enabled" : {
+
+    },
+    "An App Store transaction update could not be verified." : {
+
+    },
+    "Anchor" : {
+
+    },
+    "Anchor Watch" : {
+
+    },
+    "Anchor Watch access could not be saved safely. Try arming again." : {
+
+    },
+    "Anchor Watch access is required before this watch can start." : {
+
+    },
+    "Anchor Watch is an auxiliary aid, not a certified navigation or safety system. Test alarms before relying on it and keep an independent anchor watch and navigation backup." : {
+
+    },
+    "Anchor alarm notifications could not be enabled: %@" : {
+
+    },
+    "Anchor alarm ready" : {
+
+    },
+    "Anchor drift plot" : {
+
+    },
+    "Anchor mode" : {
+
+    },
+    "Anchor-drop position recorded. Arm after paying out the rode." : {
+
+    },
+    "Annual · Best value" : {
+
+    },
+    "Arm after paying out the rode" : {
+
+    },
+    "Arm anchor alarm" : {
+
+    },
+    "Armed • %@" : {
+
+    },
+    "Background Location" : {
+
+    },
+    "Background location unavailable" : {
+
+    },
+    "Before pairing for remote use, install Tailscale on both phones, sign in to the same Tailscale network, and connect it. Pairing alone does not provide internet access. Without Tailscale or an equivalent VPN setup, monitoring works only on the same local network." : {
+
+    },
+    "Before the first watch" : {
+
+    },
+    "Boat moved %@ from the anchor (swing limit %@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Boat moved %1$@ from the anchor (swing limit %2$@)."
+          }
+        }
+      }
+    },
+    "Boat moved %@ from the shore-tied position (limit %@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Boat moved %1$@ from the shore-tied position (limit %2$@)."
+          }
+        }
+      }
+    },
+    "Both phones must be reachable on the same LAN or through your own Tailscale/equivalent VPN. The app provides no developer-operated internet relay." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancel anchoring" : {
+
+    },
+    "Change permission to Always Allow" : {
+
+    },
+    "Choose your level" : {
+
+    },
+    "Close" : {
+
+    },
+    "Complete safety readiness" : {
+
+    },
+    "Complete the safety readiness check before arming." : {
+
+    },
+    "Confirm the permissions and alarm sound this iPhone needs while it remains aboard. Permission changes are checked again before arming." : {
+
+    },
+    "Connect Wi‑Fi or Tailscale, then reopen this screen." : {
+
+    },
+    "Connected" : {
+
+    },
+    "Connected · Setup needed" : {
+
+    },
+    "Connected · Sound ready" : {
+
+    },
+    "Continue and arm" : {
+
+    },
+    "Create new pairing code" : {
+
+    },
+    "Current drift %@. Alarm limit %@. GPS accuracy %@. %lld GPS points plotted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Current drift %1$@. Alarm limit %2$@. GPS accuracy %3$@. %4$lld GPS points plotted."
+          }
+        }
+      }
+    },
+    "Debug build · Anchor Watch and Remote features unlocked" : {
+
+    },
+    "Debug build. Anchor Watch and Remote Anchor Watch features are unlocked." : {
+
+    },
+    "Decrease %@" : {
+
+    },
+    "Degraded GPS precision" : {
+
+    },
+    "Denied" : {
+
+    },
+    "Disarm" : {
+
+    },
+    "Disarm anchor alarm" : {
+
+    },
+    "Disarm anchor watch" : {
+
+    },
+    "Disarm anchor watch?" : {
+
+    },
+    "Display units" : {
+
+    },
+    "Done" : {
+
+    },
+    "Drop anchor" : {
+
+    },
+    "Enable Precise Location in Settings" : {
+
+    },
+    "Enable Precise Location in Settings before using the anchor alarm." : {
+
+    },
+    "Enable Precise Location in Settings for GPS streaming and the anchor alarm." : {
+
+    },
+    "Enable Precise Location in Settings to record the anchor position." : {
+
+    },
+    "Enable Precise Location in Settings to transmit a usable marine position." : {
+
+    },
+    "Enable notifications and sound in Settings" : {
+
+    },
+    "Enable notifications and sound in Settings so the anchor alarm can wake you." : {
+
+    },
+    "Enabled" : {
+
+    },
+    "Feet" : {
+
+    },
+    "For a boat free to swing. Tap Drop anchor at the anchor-drop point, then arm after paying out the rode." : {
+
+    },
+    "For a bow anchor with the stern tied ashore. Arming records the boat's current tied position and watches a tight circle around it." : {
+
+    },
+    "Free swinging" : {
+
+    },
+    "GPS and diagnostics" : {
+
+    },
+    "GPS accuracy" : {
+
+    },
+    "GPS fix is stale" : {
+
+    },
+    "GPS position has been unavailable for %lld seconds." : {
+
+    },
+    "GPS precision is degraded (%@) for a %@ alarm limit. With this fix, the conservative alarm needs about %@ of measured drift to confirm a breach. Give the boat phone a clearer view of the sky." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "GPS precision is degraded (%1$@) for a %2$@ alarm limit. With this fix, the conservative alarm needs about %3$@ of measured drift to confirm a breach. Give the boat phone a clearer view of the sky."
+          }
+        }
+      }
+    },
+    "I have a separate Android phone for shore monitoring" : {
+
+    },
+    "I heard the siren" : {
+
+    },
+    "I understand Anchor Watch is an auxiliary aid. It does not replace a responsible anchor watch or independent navigation and safety equipment." : {
+
+    },
+    "Improving GPS accuracy… currently %@; need %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Improving GPS accuracy… currently %1$@; need %2$@."
+          }
+        }
+      }
+    },
+    "Inactive" : {
+
+    },
+    "Increase %@" : {
+
+    },
+    "Last NMEA transmission" : {
+
+    },
+    "Laying anchor" : {
+
+    },
+    "Listening on TCP port %u" : {
+
+    },
+    "Loading App Store price…" : {
+
+    },
+    "Loading App Store products…" : {
+
+    },
+    "Location permission is unavailable, so the anchor position cannot be monitored." : {
+
+    },
+    "Location permission needed" : {
+
+    },
+    "Location permission not requested" : {
+
+    },
+    "Location permission unavailable" : {
+
+    },
+    "Manage Subscription" : {
+
+    },
+    "Mark anchor position" : {
+
+    },
+    "Metres" : {
+
+    },
+    "Monthly" : {
+
+    },
+    "More options" : {
+
+    },
+    "N" : {
+
+    },
+    "NMEA Stream" : {
+
+    },
+    "NMEA Stream connection" : {
+
+    },
+    "No Tailscale address detected. Unless another included address is from your VPN, this code is local-network only." : {
+
+    },
+    "No Wi‑Fi address found" : {
+
+    },
+    "No reachable address" : {
+
+    },
+    "No shore monitor connected" : {
+
+    },
+    "North-up • focused on the alarm boundary, current position, and recent trail. Isolated older GPS outliers do not shrink the plot." : {
+
+    },
+    "North-up • the trail begins at the anchor-drop point and updates while you pay out the rode. The alarm is not armed yet." : {
+
+    },
+    "Not requested" : {
+
+    },
+    "Not set" : {
+
+    },
+    "Notification permission not requested" : {
+
+    },
+    "Notification status unavailable" : {
+
+    },
+    "Notifications and sound" : {
+
+    },
+    "Notifications authorized provisionally" : {
+
+    },
+    "On the Android shore phone, scan this code with its Camera app. Anchor Watch opens automatically in read-only monitor mode." : {
+
+    },
+    "Open Location Settings" : {
+
+    },
+    "Open Settings" : {
+
+    },
+    "Optional shore monitor" : {
+
+    },
+    "Pair shore monitor" : {
+
+    },
+    "Play the two-second siren, then confirm that you heard it" : {
+
+    },
+    "Play two-second siren" : {
+
+    },
+    "Precise Location" : {
+
+    },
+    "Precise Location enabled" : {
+
+    },
+    "Precise Location is required" : {
+
+    },
+    "Purchase cancelled. Nothing was charged." : {
+
+    },
+    "Purchase pending. Access unlocks only after the App Store confirms payment." : {
+
+    },
+    "Ready" : {
+
+    },
+    "Record the anchor position" : {
+
+    },
+    "Record the anchor-drop position before arming free-swinging mode." : {
+
+    },
+    "Reference" : {
+
+    },
+    "Refresh addresses" : {
+
+    },
+    "Refresh after connecting VPN" : {
+
+    },
+    "Remote Anchor Watch is required to create a pairing code." : {
+
+    },
+    "Remote monitoring requires a VPN" : {
+
+    },
+    "Remote subscription active" : {
+
+    },
+    "Remote subscription expired." : {
+
+    },
+    "Remote subscription was revoked or refunded." : {
+
+    },
+    "Remote upgrades require currently validated Anchor Watch ownership. Your active local watch remains protected until it is disarmed." : {
+
+    },
+    "Replace paired monitor" : {
+
+    },
+    "Replace the paired monitor?" : {
+
+    },
+    "Requires a separate Android phone; iPhone and iPad cannot act as the shore monitor." : {
+
+    },
+    "Restore Purchases" : {
+
+    },
+    "Restoring purchases…" : {
+
+    },
+    "Restricted" : {
+
+    },
+    "Review readiness and test alarm" : {
+
+    },
+    "Safety Readiness" : {
+
+    },
+    "Save readiness" : {
+
+    },
+    "Secure shore-monitor pairing could not be initialized: %@" : {
+
+    },
+    "Sentences appear here after the first GPS fix." : {
+
+    },
+    "Set up a navigation app" : {
+
+    },
+    "Set up shore monitor" : {
+
+    },
+    "Share pairing link" : {
+
+    },
+    "Shorelined" : {
+
+    },
+    "Silence" : {
+
+    },
+    "Silence alarm" : {
+
+    },
+    "Siren confirmed on this iPhone" : {
+
+    },
+    "Siren playing…" : {
+
+    },
+    "Start streaming" : {
+
+    },
+    "Starting TCP server…" : {
+
+    },
+    "Stop streaming" : {
+
+    },
+    "Stopped" : {
+
+    },
+    "StoreKit test mode · Features follow local test purchases" : {
+
+    },
+    "Streaming NMEA" : {
+
+    },
+    "Subscription is in a billing grace period. Update payment details in the App Store." : {
+
+    },
+    "Subscriptions auto-renew for the displayed billing period unless cancelled at least 24 hours before renewal. Manage or cancel in App Store subscriptions. Access is platform-specific and does not transfer to Google Play." : {
+
+    },
+    "System Default" : {
+
+    },
+    "TCP server failed" : {
+
+    },
+    "Tailscale address included. Keep Tailscale connected on both phones." : {
+
+    },
+    "Tailscale setup instructions" : {
+
+    },
+    "Test siren again" : {
+
+    },
+    "Test the alarm and phone volume before relying on it. Keep a physical anchor watch and an independent navigation backup." : {
+
+    },
+    "The App Store is retrying billing. Manage the subscription to avoid losing new-session access." : {
+
+    },
+    "The App Store returned an unknown purchase result." : {
+
+    },
+    "The App Store transaction could not be verified." : {
+
+    },
+    "The authoritative boat phone battery is critical at %lld%% and is not charging." : {
+
+    },
+    "The authoritative boat phone battery is low at %lld%% and is not charging." : {
+
+    },
+    "The boat will no longer be monitored for drift or GPS loss." : {
+
+    },
+    "The current location authorization state is unsupported." : {
+
+    },
+    "The in-app alarm siren could not start: %@" : {
+
+    },
+    "The previous anchor watch could not be resumed safely. Arm a new watch." : {
+
+    },
+    "The previous shore phone will no longer authenticate." : {
+
+    },
+    "This is a one-time, platform-specific purchase. It restores only with the same Apple account and does not transfer to Google Play." : {
+
+    },
+    "This purchase is not available from the App Store right now." : {
+
+    },
+    "Turn the boat phone into a local drift and GPS-loss alarm. Choose a shore-tied position or a free-swinging anchor circle, then keep the phone aboard and powered." : {
+
+    },
+    "Unknown" : {
+
+    },
+    "Unlock Anchor Watch" : {
+
+    },
+    "Unlock Anchor Watch before recording an anchor position." : {
+
+    },
+    "Unlock Anchor Watch before starting a new watch." : {
+
+    },
+    "Unlock Anchor Watch before subscribing to Remote Anchor Watch." : {
+
+    },
+    "Unlock Anchor Watch · %@" : {
+
+    },
+    "View pairing code" : {
+
+    },
+    "Waiting for GPS points. Alarm limit %@." : {
+
+    },
+    "Waiting for a navigation app" : {
+
+    },
+    "Waiting for permission" : {
+
+    },
+    "Waiting for the App Store…" : {
+
+    },
+    "Watch details" : {
+
+    },
+    "While Using" : {
+
+    },
+    "iOS cannot relaunch this app after a force-quit or restart. Reopen the app and re-arm Anchor Watch before leaving the phone aboard." : {
+
+    },
+    "⚠ ANCHOR ALARM" : {
+
+    }
+  },
+  "version" : "1.0"
+}

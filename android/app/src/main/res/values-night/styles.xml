@@ -3,7 +3,6 @@
     <style name="Theme.NavionicsGPSBridge" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">@color/nav_background</item>
         <item name="android:navigationBarColor">@color/nav_background</item>
         <item name="android:colorAccent">@color/nav_blue</item>

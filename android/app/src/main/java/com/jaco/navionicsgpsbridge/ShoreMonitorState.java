@@ -9,6 +9,7 @@ final class ShoreMonitorState {
     final boolean paired;
     final boolean enabled;
     final boolean connected;
+    final boolean hasBoatState;
     final boolean soundReady;
     final boolean armed;
     final boolean alarmActive;
@@ -24,7 +25,8 @@ final class ShoreMonitorState {
     final List<BridgeState.AnchorTrackPoint> history;
     final String statusMessage;
 
-    ShoreMonitorState(boolean paired, boolean enabled, boolean connected, boolean soundReady,
+    ShoreMonitorState(boolean paired, boolean enabled, boolean connected, boolean hasBoatState,
+            boolean soundReady,
             boolean armed, boolean alarmActive, String alarmReason, String mode,
             double radiusMeters, double distanceMeters, double accuracyMeters,
             int boatBatteryPercent, boolean boatCharging, String sessionId,
@@ -33,6 +35,7 @@ final class ShoreMonitorState {
         this.paired = paired;
         this.enabled = enabled;
         this.connected = connected;
+        this.hasBoatState = hasBoatState;
         this.soundReady = soundReady;
         this.armed = armed;
         this.alarmActive = alarmActive;

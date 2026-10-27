@@ -137,9 +137,9 @@ struct AnchorPairingView: View {
 
     private var remoteAccessStatusText: String {
         if includesTailscaleAddress {
-            return "Tailscale address included. Keep Tailscale connected on both phones."
+            return String(localized: "Tailscale address included. Keep Tailscale connected on both phones.")
         }
-        return "No Tailscale address detected. Unless another included address is from your VPN, this code is local-network only."
+        return String(localized: "No Tailscale address detected. Unless another included address is from your VPN, this code is local-network only.")
     }
 
     private var remoteAccessStatusSymbol: String {
@@ -149,9 +149,9 @@ struct AnchorPairingView: View {
     private static let tailscaleSetupURL = URL(string: "https://tailscale.com/docs/how-to/quickstart")!
 
     private var statusText: String {
-        if !monitorConnected { return "Not paired · Waiting for shore monitor" }
-        if monitorSoundReady { return "Connected · Sound ready" }
-        return "Connected · Setup needed"
+        if !monitorConnected { return String(localized: "No shore monitor connected") }
+        if monitorSoundReady { return String(localized: "Connected · Sound ready") }
+        return String(localized: "Connected · Setup needed")
     }
 
     private var statusSymbol: String {

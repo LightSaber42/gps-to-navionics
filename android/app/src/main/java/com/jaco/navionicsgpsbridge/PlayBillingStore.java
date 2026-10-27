@@ -163,7 +163,7 @@ public final class PlayBillingStore implements PurchasesUpdatedListener {
                 useUnavailableCache();
                 setActionState(
                         ActionState.ERROR,
-                        "Google Play is temporarily unavailable. Purchases will refresh automatically.");
+                        context.getString(R.string.google_play_temporarily_unavailable));
             }
         });
     }
@@ -198,12 +198,14 @@ public final class PlayBillingStore implements PurchasesUpdatedListener {
         if (!androidCompanionAcknowledged) {
             setActionState(
                     ActionState.ERROR,
-                    "Confirm that Remote Anchor Watch requires a separate Android phone.");
+                    context.getString(R.string.confirm_android_companion));
             return;
         }
         if (!entitlementDecision.featureLevel.includes(
                 EntitlementPolicy.FeatureLevel.ANCHOR_WATCH)) {
-            setActionState(ActionState.ERROR, "Unlock Anchor Watch before subscribing.");
+            setActionState(
+                    ActionState.ERROR,
+                    context.getString(R.string.unlock_anchor_before_subscribing));
             return;
         }
         ProductOffer offer = StoreProductIdentifiers.REMOTE_ANNUAL_BASE_PLAN.equals(basePlanID)
@@ -413,12 +415,12 @@ public final class PlayBillingStore implements PurchasesUpdatedListener {
             setActionState(
                     ActionState.ERROR,
                     playPublicKey.isEmpty()
-                            ? "Google Play billing is not configured for this build."
-                            : "A Google Play purchase could not be verified.");
+                            ? context.getString(R.string.google_play_billing_not_configured)
+                            : context.getString(R.string.google_play_purchase_not_verified));
         } else if (pending) {
             setActionState(
                     ActionState.PENDING,
-                    "Payment is pending. Access will unlock only after Google Play confirms it.");
+                    context.getString(R.string.payment_pending_confirmation));
         }
     }
 
@@ -440,21 +442,23 @@ public final class PlayBillingStore implements PurchasesUpdatedListener {
             if (result.getResponseCode() != BillingClient.BillingResponseCode.OK) {
                 setActionState(
                         ActionState.ERROR,
-                        "The purchase is active, but Google Play acknowledgement will be retried.");
+                        context.getString(R.string.play_acknowledgement_retry));
             }
         });
     }
 
     private void launchBillingFlow(Activity activity, ProductOffer offer) {
         if (!billingClient.isReady()) {
-            setActionState(ActionState.ERROR, "Google Play is not ready. Try again shortly.");
+            setActionState(
+                    ActionState.ERROR,
+                    context.getString(R.string.google_play_not_ready));
             start();
             return;
         }
         if (offer == null) {
             setActionState(
                     ActionState.ERROR,
-                    "This purchase is not available from Google Play right now.");
+                    context.getString(R.string.google_play_purchase_unavailable));
             return;
         }
         BillingFlowParams.ProductDetailsParams.Builder detailsBuilder =
@@ -499,16 +503,17 @@ public final class PlayBillingStore implements PurchasesUpdatedListener {
     private String billingErrorMessage(BillingResult result) {
         switch (result.getResponseCode()) {
             case BillingClient.BillingResponseCode.BILLING_UNAVAILABLE:
-                return "Google Play billing is unavailable on this device.";
+                return context.getString(R.string.google_play_billing_unavailable);
             case BillingClient.BillingResponseCode.NETWORK_ERROR:
             case BillingClient.BillingResponseCode.SERVICE_DISCONNECTED:
             case BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE:
-                return "Google Play could not be reached. Check your connection and try again.";
+                return context.getString(R.string.google_play_unreachable);
             case BillingClient.BillingResponseCode.ITEM_UNAVAILABLE:
-                return "This product is not available from Google Play right now.";
+                return context.getString(R.string.google_play_product_unavailable);
             default:
-                return "Google Play could not complete the request (code "
-                        + result.getResponseCode() + ").";
+                return context.getString(
+                        R.string.google_play_error_code,
+                        result.getResponseCode());
         }
     }
 

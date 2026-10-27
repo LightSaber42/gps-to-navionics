@@ -75,7 +75,7 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Implement purchase, restore/sync, pending, cancelled, failure, refund/revocation, expiration, and billing-retry UI states.
 - [x] Cache only the minimum entitlement metadata needed for safe offline evaluation.
 - [x] Add a StoreKit configuration file for deterministic local purchase tests without changing Release behavior.
-- [ ] Add `Manage Subscription`, `Restore Purchases`, privacy, terms, and support links.
+- [x] Add `Manage Subscription`, `Restore Purchases`, privacy, terms, and support links.
 - [x] Ensure dynamic localized store prices are used; never hard-code checkout prices in UI.
 
 ## 4. Android purchases and entitlement state
@@ -101,11 +101,11 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Keep the remote upgrade available from the shore-monitor card.
 - [x] Keep Android normal launches on Anchor; QR/deep links and monitor notifications open Shore Monitor directly.
 - [x] Preserve a secondary route from the Android main app to an already-paired shore monitor.
-- [ ] Apply the previously agreed cross-platform UI information contract: canonical anchor state wording, GPS accuracy, plotted fixes, reference details, diagnostics structure, and truthful connection wording.
+- [x] Apply the previously agreed cross-platform UI information contract: canonical anchor state wording, GPS accuracy, plotted fixes, reference details, diagnostics structure, and truthful connection wording. See `docs/UI_INFORMATION_CONTRACT.md`.
 
 ## 6. Paywalls and purchase disclosures
 
-- [ ] Build an Anchor Watch lifetime paywall with benefits, dynamic price, restore action, safety limitation, privacy, support, and terms.
+- [x] Build an Anchor Watch lifetime paywall with benefits, dynamic price, restore action, safety limitation, privacy, support, and terms.
 - [x] Build a separate Remote Anchor Watch paywall available only after tier 2 is owned.
 - [x] Offer monthly and annual products together and highlight annual as best value.
 - [x] Put `Requires a separate Android phone; iPhone and iPad cannot act as the shore monitor` directly above checkout.
@@ -141,12 +141,14 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Change store/display naming to Anchor Watch & GPS Bridge / Anchor Watch.
 - [x] Change visible `Bridge` terminology to `NMEA Stream` where it refers to the free feature.
 - [x] Remove Navionics from the product title and add a concise unaffiliated compatibility disclaimer where referenced.
-- [ ] Move iOS user-facing copy into a String Catalog or `Localizable.strings` structure.
-- [ ] Move Android user-facing copy into `res/values/strings.xml`.
-- [ ] Design a distinctive anchor + GPS/radar visual system without third-party chart branding.
-- [ ] Produce iOS App Icon assets at all required sizes.
-- [ ] Produce Android adaptive foreground/background and monochrome icon assets plus notification-safe iconography.
+- [x] Move iOS user-facing copy into a String Catalog or `Localizable.strings` structure.
+- [x] Move Android user-facing copy into `res/values/strings.xml`.
+- [x] Design a distinctive anchor + GPS/radar visual system without third-party chart branding.
+- [x] Produce iOS App Icon assets at all required sizes.
+- [x] Produce Android adaptive foreground/background and monochrome icon assets plus notification-safe iconography.
+  - 2026-08-19: English iOS String Catalogs and Android resources compile in Release builds. The navy/white/cyan radar-anchor identity is wired through the iOS asset catalog and Android adaptive, themed monochrome, and notification-safe vectors.
 - [ ] Verify light/dark appearance, contrast, Dynamic Type/text scaling, and screen-reader labels.
+  - 2026-08-19: The iOS Release build was visually checked in light/dark appearance, increased contrast, and the largest accessibility text size. The navigation title and section switcher were adjusted to avoid accessibility-size truncation. Android device rendering and VoiceOver/TalkBack traversal remain.
 
 ## 10. Store metadata, privacy, and legal artifacts
 
@@ -160,26 +162,37 @@ This document is the implementation and submission checklist for repositioning t
 - [x] Draft terms/subscription terms and auxiliary-safety disclaimer.
 - [x] Add in-app links using placeholder configuration until the public domain is known.
 - [ ] Replace every placeholder with live HTTPS URLs before submission.
+  - 2026-08-20: Privacy is live at `https://achievetherapy.co.uk/anchor-watch/privacy/` and is wired into both apps. Support and terms URLs remain.
 - [x] Add a non-affiliation statement for Navionics/Garmin compatibility references.
 
 ## 11. Release engineering
 
-- [ ] Add/verify iOS Release archive configuration, signing, capabilities, versioning, and export validation.
+- [x] Add/verify iOS Release archive configuration, signing, capabilities, versioning, and export validation.
+  - 2026-08-20: Xcode is signed into team `385U4527HY`. Automatic signing created the app-specific profile, and `2.0.0 (4)` archived and exported with the Apple Distribution identity. The exported IPA uses `com.jaco.navionicsgpsbridge`, includes `PrivacyInfo.xcprivacy`, contains the live privacy URL, and has `get-task-allow=false`.
 - [ ] Apply for Apple Critical Alerts entitlement and track it as optional for 2.0.
 - [ ] Configure App Store Connect non-consumable and subscription group/products.
+  - 2026-08-21: Created App Store Connect app `6803948419` for `com.jaco.navionicsgpsbridge` and set its release version to `2.0.0`; configured the USD 9.99 lifetime non-consumable and the USD 2.99 monthly/USD 19.99 annual subscriptions in group `22325758`, with worldwide availability and English (U.K.) localization. The two durations still need to be stacked at the same service level before this item is complete; no product has been submitted for review.
 - [ ] Configure Google Play one-time product and one subscription with monthly/annual base plans.
-- [ ] Enable Play App Signing and create/protect a separate upload key outside source control.
-- [ ] Configure release minification/resource shrinking only after protocol/crypto reflection behavior is verified.
-- [ ] Produce an Android App Bundle and verify signing, version code, manifest, and 16 KB page compatibility.
+  - 2026-08-21: Created Play app `4975101296680155371`, wired its Licensing public key into Android, and uploaded `2.0.0 (5)` as a saved internal-test draft. Activated `anchor_watch_lifetime` with purchase option `lifetime` at USD 9.99 (automatic regional pricing) and created subscription `remote_anchor_watch`. Play currently rejects the otherwise valid monthly base-plan save with only `Your changes couldn't be saved`; monthly/annual base plans remain.
+- [x] Enable Play App Signing and create/protect a separate upload key outside source control.
+  - 2026-08-21: Play confirms releases are signed by Google Play. The protected 4,096-bit RSA upload key is stored outside the repository under `~/Library/Application Support/Anchor Watch Signing`, with its generated password in the login Keychain. Its public certificate has SHA-256 fingerprint `FA:46:34:25:A6:AC:8E:96:FA:BD:87:D0:C7:88:64:AF:F8:FA:3F:2A:55:6B:6E:85:3C:17:F7:A3:50:2C:0E:24`. An off-machine backup of the keystore and password is still required.
+- [x] Configure release minification/resource shrinking only after protocol/crypto reflection behavior is verified.
+  - 2026-08-19: R8 obfuscation, optimization, code shrinking, and resource shrinking are enabled for Release. The shrunk bundle builds cleanly, emits the Play deobfuscation mapping, and the crypto/display compatibility self-tests pass against the Release-compiled classes.
+- [x] Produce an Android App Bundle and verify signing, version code, manifest, and 16 KB page compatibility.
+  - 2026-08-21: `android/build-release.sh` produced the R8-shrunk, upload-key-signed `app-release.aab` with version `2.0.0 (5)`, target API 36, the live privacy URL, the Play licensing public key, and no native `.so` libraries, so native 16 KB page-size validation is not applicable. `jarsigner` verification passed and the embedded signer matches the exported upload certificate. SHA-256: `587e8500744ec356c5ea3c64c5391e9bfb22edc4b65f262dff2bda3e2814dd95`.
 - [x] Create TestFlight and Play internal/closed-test release instructions.
 - [x] Define staged production rollout and rollback/stop criteria.
 
 ## 12. Verification matrix
 
-- [ ] Run all XCTest suites on an installed simulator/device target.
-- [ ] Build an iOS Release archive and validate it.
-- [ ] Build and sign Android debug APK and release AAB.
-- [ ] Run `AnchorSyncCryptoSelfTest` against the final Android build classes.
+- [x] Run all XCTest suites on an installed simulator/device target.
+  - Passed on an iPhone 17 Pro simulator running iOS 26.4 on 2026-08-19.
+- [x] Build an iOS Release archive and validate it.
+  - The distribution-exported `2.0.0 (4)` IPA passed local signature verification, includes `PrivacyInfo.xcprivacy`, and excludes the Debug entitlement bypass.
+- [x] Build and sign Android debug APK and release AAB.
+  - 2026-08-20: Debug APK v2 signing was already verified; the `2.0.0 (5)` release AAB is now signed by the protected Play upload key and passes `jarsigner` verification.
+- [x] Run `AnchorSyncCryptoSelfTest` against the final Android build classes.
+  - `AnchorSyncCryptoSelfTest` and `DisplayUnitsSelfTest` passed against the current Release-compiled classes on 2026-08-19; rerun against the signed submission candidate if its code changes.
 - [ ] Test free NMEA Stream without purchases on both platforms.
 - [ ] Test Anchor Watch purchase, pending/cancelled/error states, restore, refund/revocation, and reinstall on both stores.
 - [ ] Test Remote monthly and annual subscription purchase, upgrade/switch, cancellation, expiry, billing retry/grace, offline cache, and management links.
@@ -194,11 +207,16 @@ This document is the implementation and submission checklist for repositioning t
 
 ## External submission blockers
 
-- [ ] Purchase and configure a public domain.
+- [x] Purchase and configure a public domain.
+  - `achievetherapy.co.uk` is live on GitHub Pages.
 - [ ] Publish live privacy, support, and terms pages over HTTPS.
-- [ ] Create domain-based support contact details for store listings.
+  - Privacy is live at `https://achievetherapy.co.uk/anchor-watch/privacy/`; support and terms remain.
+- [x] Create domain-based support contact details for store listings.
+  - Use `app@achievetherapy.co.uk`.
 - [ ] Create and approve all in-app products in App Store Connect and Play Console.
 - [ ] Complete Apple agreements, tax, banking, export-compliance, age-rating, and privacy responses.
+  - 2026-08-21: The Free Apps Agreement is active. The Paid Apps Agreement is `Pending User Info`; the bank account update is processing (Apple says up to 24 hours), and the U.S. Tax Questionnaire still reports `Missing Tax Info`.
 - [ ] Complete Google Play identity, payments profile, content rating, Data Safety, app-access, ads, target-audience, and foreground-service declarations.
+  - 2026-08-21: The merchant payments profile exists, but Google Play still shows `Add a payment method to receive your earnings`. The Android package is registered for developer verification; the remaining app-content and policy declarations are not complete.
 - [ ] Obtain Critical Alerts approval if Apple grants it; otherwise ship without critical-alert claims.
 - [ ] Complete the required beta tester period and physical-device verification.

@@ -54,7 +54,7 @@ To the maximum extent permitted by law, the app is provided as available without
 
 ## 9. Privacy
 
-The privacy policy at `https://[PUBLIC_DOMAIN]/anchor-watch/privacy` explains local location/history processing, direct NMEA and paired transfers, store billing, retention, and deletion.
+The privacy policy at `https://achievetherapy.co.uk/anchor-watch/privacy/` explains local location/history processing, direct NMEA and paired transfers, store billing, retention, and deletion.
 
 ## 10. Governing law and contact
 

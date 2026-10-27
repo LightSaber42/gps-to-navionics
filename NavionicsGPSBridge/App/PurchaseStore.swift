@@ -88,11 +88,11 @@ final class PurchaseStore: ObservableObject {
             StoreProductIdentifiers.remoteAnnual
         ].contains(productID),
            entitlementDecision.featureLevel.rawValue < FeatureLevel.anchorWatch.rawValue {
-            actionState = .failed("Unlock Anchor Watch before subscribing to Remote Anchor Watch.")
+            actionState = .failed(String(localized: "Unlock Anchor Watch before subscribing to Remote Anchor Watch."))
             return
         }
         guard let product = products[productID] else {
-            actionState = .failed("This purchase is not available from the App Store right now.")
+            actionState = .failed(String(localized: "This purchase is not available from the App Store right now."))
             return
         }
         actionState = .purchasing
@@ -101,7 +101,7 @@ final class PurchaseStore: ObservableObject {
             switch result {
             case let .success(verification):
                 guard let transaction = verifiedTransaction(from: verification) else {
-                    actionState = .failed("The App Store transaction could not be verified.")
+                    actionState = .failed(String(localized: "The App Store transaction could not be verified."))
                     return
                 }
                 await transaction.finish()
@@ -113,7 +113,7 @@ final class PurchaseStore: ObservableObject {
             case .userCancelled:
                 actionState = .cancelled
             @unknown default:
-                actionState = .failed("The App Store returned an unknown purchase result.")
+                actionState = .failed(String(localized: "The App Store returned an unknown purchase result."))
             }
         } catch {
             actionState = .failed(error.localizedDescription)
@@ -271,7 +271,7 @@ final class PurchaseStore: ObservableObject {
         for await verification in StoreKit.Transaction.updates {
             guard !Task.isCancelled else { return }
             guard let transaction = verifiedTransaction(from: verification) else {
-                actionState = .failed("An App Store transaction update could not be verified.")
+                actionState = .failed(String(localized: "An App Store transaction update could not be verified."))
                 continue
             }
             await transaction.finish()

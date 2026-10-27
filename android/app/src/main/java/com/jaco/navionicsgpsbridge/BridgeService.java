@@ -35,7 +35,6 @@ import java.net.InetAddress;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
@@ -166,7 +165,7 @@ public final class BridgeService extends Service implements LocationListener,
     private Location latestLocation;
     private int clientCount;
     private List<InetAddress> udpBroadcastAddresses = new ArrayList<>();
-    private String listenerDescription = "Stopped";
+    private String listenerDescription;
     private List<BridgeState.NetworkAddress> networkAddresses = new ArrayList<>();
     private String lastSentences = "";
     private String error;
@@ -185,9 +184,10 @@ public final class BridgeService extends Service implements LocationListener,
     @Override
     public void onCreate() {
         super.onCreate();
+        listenerDescription = getString(R.string.stopped);
         preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        server = new NmeaTcpServer(this);
+        server = new NmeaTcpServer(this, this);
         udpBroadcaster = new NmeaUdpBroadcaster();
         anchorHistoryStore = new AnchorHistoryStore(this);
         anchorEventStore = new AnchorEventStore(this);
@@ -279,7 +279,7 @@ public final class BridgeService extends Service implements LocationListener,
     @Override
     public void onProviderDisabled(String provider) {
         synchronized (stateLock) {
-            error = "Turn on Location in Android settings to acquire a GPS fix.";
+            error = getString(R.string.turn_on_location_for_gps);
         }
         emitState();
     }
@@ -405,7 +405,7 @@ public final class BridgeService extends Service implements LocationListener,
         synchronized (stateLock) {
             anchorAlarmArmed = false;
             hasAnchorReference = false;
-            error = "The previous anchor watch could not be resumed safely. Arm a new watch.";
+            error = getString(R.string.previous_watch_not_resumed);
         }
         preferences.edit()
                 .putBoolean(KEY_ANCHOR_ARMED, false)
@@ -492,7 +492,7 @@ public final class BridgeService extends Service implements LocationListener,
         synchronized (stateLock) {
             if (streaming) return;
             if (!hasFineLocationPermission()) {
-                error = "Precise Location permission is required to stream a marine position.";
+                error = getString(R.string.precise_location_required_streaming);
                 return;
             }
             streaming = true;
@@ -511,7 +511,7 @@ public final class BridgeService extends Service implements LocationListener,
             wasStreaming = streaming;
             streaming = false;
             clientCount = 0;
-            listenerDescription = "Stopped";
+            listenerDescription = getString(R.string.stopped);
         }
         preferences.edit().putBoolean(KEY_STREAMING, false).apply();
         if (wasStreaming) {
@@ -525,7 +525,7 @@ public final class BridgeService extends Service implements LocationListener,
     private void beginAnchorSetup(Intent intent) {
         if (!hasCurrentAnchorEntitlement()) {
             synchronized (stateLock) {
-                error = "Unlock Anchor Watch before starting a new watch.";
+                error = getString(R.string.unlock_anchor_before_new_watch);
             }
             emitState();
             return;
@@ -571,14 +571,14 @@ public final class BridgeService extends Service implements LocationListener,
     private void armAnchorAlarm(Intent intent) {
         if (!hasCurrentAnchorEntitlement()) {
             synchronized (stateLock) {
-                error = "Unlock Anchor Watch before starting a new watch.";
+                error = getString(R.string.unlock_anchor_before_new_watch);
             }
             emitState();
             return;
         }
         if (!hasFineLocationPermission()) {
             synchronized (stateLock) {
-                error = "Precise Location permission is required for the anchor alarm.";
+                error = getString(R.string.precise_location_required_anchor_alarm);
             }
             return;
         }
@@ -591,7 +591,7 @@ public final class BridgeService extends Service implements LocationListener,
         double longitude = intent.getDoubleExtra(EXTRA_ANCHOR_LONGITUDE, Double.NaN);
         if (!validCoordinate(latitude, longitude)) {
             synchronized (stateLock) {
-                error = "A fresh GPS position is required before arming the anchor alarm.";
+                error = getString(R.string.fresh_gps_required_before_arming);
             }
             return;
         }
@@ -612,7 +612,7 @@ public final class BridgeService extends Service implements LocationListener,
                 System.currentTimeMillis());
         if (lease == null || !sessionLeaseStore.save(lease)) {
             synchronized (stateLock) {
-                error = "Anchor Watch access could not be saved safely. Try arming again.";
+                error = getString(R.string.anchor_access_not_saved);
             }
             emitState();
             return;
@@ -682,7 +682,7 @@ public final class BridgeService extends Service implements LocationListener,
             if (!anchorAlarmTriggered) return;
             anchorAlarmTriggered = false;
             anchorAlarmSilenced = true;
-            anchorAlertReason = "Alarm silenced — monitoring continues until the boat is back inside the limit.";
+            anchorAlertReason = getString(R.string.alarm_silenced_until_inside_limit);
             breachStartedElapsedMillis = 0L;
         }
         anchorEventStore.acknowledgeAll();
@@ -695,7 +695,7 @@ public final class BridgeService extends Service implements LocationListener,
     private void updateAnchorSettings(AnchorAlarm.Mode mode, double radiusMeters) {
         if (!canUseAnchorWatch()) {
             synchronized (stateLock) {
-                error = "Unlock Anchor Watch before changing watch settings.";
+                error = getString(R.string.unlock_anchor_before_settings);
             }
             emitState();
             return;
@@ -774,7 +774,8 @@ public final class BridgeService extends Service implements LocationListener,
         acquireWakeLock();
         updateLocationRegistration();
         if (monitorTask == null || monitorTask.isCancelled()) {
-            monitorTask = scheduler.scheduleAtFixedRate(this::monitorTick, 0, 1, TimeUnit.SECONDS);
+            monitorTask = scheduler.scheduleWithFixedDelay(
+                    this::monitorTick, 0, 1, TimeUnit.SECONDS);
         }
         updateMonitoringNotification();
     }
@@ -813,12 +814,12 @@ public final class BridgeService extends Service implements LocationListener,
                 locationUpdatesRegistered = true;
             } else {
                 synchronized (stateLock) {
-                    error = "Turn on Location in Android settings to acquire a GPS fix.";
+                    error = getString(R.string.turn_on_location_for_gps);
                 }
             }
         } catch (SecurityException securityError) {
             synchronized (stateLock) {
-                error = "Precise Location permission is required for GPS monitoring.";
+                error = getString(R.string.precise_location_required_monitoring);
             }
         }
     }
@@ -909,13 +910,12 @@ public final class BridgeService extends Service implements LocationListener,
             if (now - breachStartedElapsedMillis >= BREACH_CONFIRMATION_MILLIS) {
                 shouldTrigger = true;
                 DisplayUnits displayUnits = DisplayUnits.load(this);
-                reason = anchorMode == AnchorAlarm.Mode.SHORELINED
-                        ? "Boat moved " + displayUnits.format(assessment.distanceMeters, 1)
-                        + " from the shore-tied position (limit "
-                        + displayUnits.format(anchorRadiusMeters) + ")."
-                        : "Boat moved " + displayUnits.format(assessment.distanceMeters, 1)
-                        + " from the anchor (swing limit "
-                        + displayUnits.format(anchorRadiusMeters) + ").";
+                reason = getString(
+                        anchorMode == AnchorAlarm.Mode.SHORELINED
+                                ? R.string.boat_moved_from_shore_position
+                                : R.string.boat_moved_from_anchor,
+                        displayUnits.format(assessment.distanceMeters, 1),
+                        displayUnits.format(anchorRadiusMeters));
                 breachEventIssued = true;
             }
         }
@@ -941,8 +941,11 @@ public final class BridgeService extends Service implements LocationListener,
                 if (lostFixEventIssued) return;
                 lostFixEventIssued = true;
             }
-            triggerAnchorAlarm(String.format(Locale.US,
-                    "GPS position has been unavailable for %.0f seconds.", ageSeconds),
+            long roundedAge = Math.round(ageSeconds);
+            triggerAnchorAlarm(getResources().getQuantityString(
+                    R.plurals.gps_unavailable_seconds,
+                    (int) Math.min(Integer.MAX_VALUE, roundedAge),
+                    roundedAge),
                     "gps_unavailable");
         } else {
             synchronized (stateLock) {
@@ -971,8 +974,7 @@ public final class BridgeService extends Service implements LocationListener,
                 criticalBatteryEventIssued = true;
             }
             triggerAnchorAlarm(
-                    "The authoritative boat phone battery is critical at " + percent
-                            + "% and is not charging.",
+                    getString(R.string.boat_battery_critical, percent),
                     "battery_critical");
         } else if (percent <= 20) {
             synchronized (stateLock) {
@@ -980,8 +982,7 @@ public final class BridgeService extends Service implements LocationListener,
                 lowBatteryEventIssued = true;
             }
             triggerAnchorAlarm(
-                    "The authoritative boat phone battery is low at " + percent
-                            + "% and is not charging.",
+                    getString(R.string.boat_battery_low, percent),
                     "battery_low");
         }
     }
@@ -1096,7 +1097,7 @@ public final class BridgeService extends Service implements LocationListener,
     private void reloadAnchorPairing() {
         if (!canUseRemoteAnchorWatch()) {
             synchronized (stateLock) {
-                error = "Remote Anchor Watch is required to create a pairing code.";
+                error = getString(R.string.remote_required_create_pairing);
             }
             emitState();
             return;
@@ -1111,7 +1112,9 @@ public final class BridgeService extends Service implements LocationListener,
             }
         } catch (GeneralSecurityException pairingError) {
             synchronized (stateLock) {
-                error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
+                error = getString(
+                        R.string.secure_shore_pairing_failed,
+                        pairingError.getLocalizedMessage());
             }
         }
         reconcileAnchorSyncServer();
@@ -1132,13 +1135,15 @@ public final class BridgeService extends Service implements LocationListener,
         if (anchorSyncServer != null) return;
         try {
             AnchorPairingStore.HostConfiguration host = anchorPairingStore.loadOrCreateHost();
-            AnchorSyncServer newServer = new AnchorSyncServer(this);
+            AnchorSyncServer newServer = new AnchorSyncServer(this, this);
             anchorSyncServer = newServer;
             newServer.start(host.pairingKey, anchorHistoryStore);
             updateAnchorSyncState(false);
         } catch (GeneralSecurityException pairingError) {
             synchronized (stateLock) {
-                error = "Secure shore pairing failed: " + pairingError.getLocalizedMessage();
+                error = getString(
+                        R.string.secure_shore_pairing_failed,
+                        pairingError.getLocalizedMessage());
             }
         }
     }
@@ -1196,7 +1201,7 @@ public final class BridgeService extends Service implements LocationListener,
             udpBroadcaster.start(PORT);
         } catch (IOException | RuntimeException udpError) {
             synchronized (stateLock) {
-                error = "UDP broadcast failed: " + udpError.getLocalizedMessage();
+                error = getString(R.string.udp_broadcast_failed, udpError.getLocalizedMessage());
             }
         }
     }
@@ -1325,18 +1330,20 @@ public final class BridgeService extends Service implements LocationListener,
                 .setCategory(Notification.CATEGORY_SERVICE);
 
         if (state.anchorAlarmTriggered) {
-            builder.setContentTitle("ANCHOR ALARM")
+            builder.setContentTitle(getString(R.string.anchor_alarm))
                     .setContentText(state.anchorAlertReason);
         } else if (state.anchorAlarmArmed) {
-            builder.setContentTitle("Anchor alarm armed • " + state.anchorMode.displayName)
+            builder.setContentTitle(getString(
+                    R.string.anchor_alarm_armed_mode,
+                    anchorModeDisplayName(state.anchorMode)))
                     .setContentText(anchorNotificationText(state));
         } else if (state.anchorSetupActive) {
-            builder.setContentTitle("Laying anchor")
+            builder.setContentTitle(getString(R.string.laying_anchor))
                     .setContentText(state.hasAnchorReference
                             ? anchorNotificationText(state)
-                            : "Acquiring the anchor-drop position");
+                            : getString(R.string.acquiring_anchor_drop_position));
         } else {
-            builder.setContentTitle("NMEA Stream is running")
+            builder.setContentTitle(getString(R.string.nmea_stream_running))
                     .setContentText(streamingNotificationText(state));
         }
 
@@ -1346,7 +1353,7 @@ public final class BridgeService extends Service implements LocationListener,
                     this, 1, stopIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             builder.addAction(new Notification.Action.Builder(
-                    null, "Stop streaming", stopPendingIntent).build());
+                    null, getString(R.string.stop_streaming), stopPendingIntent).build());
         }
         if (state.anchorAlarmArmed) {
             Intent disarmIntent = new Intent(this, BridgeService.class).setAction(ACTION_DISARM_ANCHOR);
@@ -1354,7 +1361,7 @@ public final class BridgeService extends Service implements LocationListener,
                     this, 2, disarmIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             builder.addAction(new Notification.Action.Builder(
-                    null, "Disarm anchor", disarmPendingIntent).build());
+                    null, getString(R.string.disarm_anchor), disarmPendingIntent).build());
         } else if (state.anchorSetupActive) {
             Intent cancelIntent = new Intent(this, BridgeService.class)
                     .setAction(ACTION_CANCEL_ANCHOR_SETUP);
@@ -1362,7 +1369,7 @@ public final class BridgeService extends Service implements LocationListener,
                     this, 2, cancelIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             builder.addAction(new Notification.Action.Builder(
-                    null, "Cancel anchoring", cancelPendingIntent).build());
+                    null, getString(R.string.cancel_anchoring_action), cancelPendingIntent).build());
         }
         return builder.build();
     }
@@ -1383,7 +1390,7 @@ public final class BridgeService extends Service implements LocationListener,
 
         return new Notification.Builder(this, ALARM_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_location)
-                .setContentTitle("⚠ ANCHOR ALARM")
+                .setContentTitle(getString(R.string.anchor_alarm_notification_title))
                 .setContentText(state.anchorAlertReason)
                 .setStyle(new Notification.BigTextStyle().bigText(state.anchorAlertReason))
                 .setContentIntent(openPendingIntent)
@@ -1392,34 +1399,54 @@ public final class BridgeService extends Service implements LocationListener,
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .addAction(new Notification.Action.Builder(
-                        null, "Silence", silencePendingIntent).build())
+                        null, getString(R.string.silence), silencePendingIntent).build())
                 .addAction(new Notification.Action.Builder(
-                        null, "Disarm", disarmPendingIntent).build())
+                        null, getString(R.string.disarm), disarmPendingIntent).build())
                 .build();
     }
 
     private String anchorNotificationText(BridgeState state) {
-        if (state.anchorAlarmSilenced) return "Alarm silenced • monitoring continues";
+        if (state.anchorAlarmSilenced) {
+            return getString(R.string.alarm_silenced_monitoring_continues);
+        }
         DisplayUnits displayUnits = DisplayUnits.load(this);
         if (!state.hasLocation || state.fixAgeSeconds > STALE_FIX_SECONDS) {
-            return "Acquiring GPS • limit " + displayUnits.format(state.anchorRadiusMeters);
+            return getString(
+                    R.string.acquiring_gps_limit,
+                    displayUnits.format(state.anchorRadiusMeters));
         }
         if (Double.isFinite(state.anchorDistanceMeters)) {
-            return displayUnits.format(state.anchorDistanceMeters, 1)
-                    + " from reference • limit " + displayUnits.format(state.anchorRadiusMeters);
+            return getString(
+                    R.string.distance_from_reference_notification,
+                    displayUnits.format(state.anchorDistanceMeters, 1),
+                    displayUnits.format(state.anchorRadiusMeters));
         }
-        return "Monitoring • limit " + displayUnits.format(state.anchorRadiusMeters);
+        return getString(
+                R.string.monitoring_limit,
+                displayUnits.format(state.anchorRadiusMeters));
     }
 
     private String streamingNotificationText(BridgeState state) {
-        if (!state.hasLocation) return "Acquiring GPS fix • TCP/UDP " + PORT;
-        if (state.fixAgeSeconds > STALE_FIX_SECONDS) return "GPS fix stale • TCP/UDP " + PORT;
-        if (state.clientCount > 0) {
-            return "Streaming to " + state.clientCount + " TCP client"
-                    + (state.clientCount == 1 ? "" : "s") + " + UDP • " + PORT;
+        if (!state.hasLocation) return getString(R.string.acquiring_gps_tcp_udp, PORT);
+        if (state.fixAgeSeconds > STALE_FIX_SECONDS) {
+            return getString(R.string.gps_stale_tcp_udp, PORT);
         }
-        if (state.udpBroadcastTargetCount > 0) return "Broadcasting NMEA • UDP " + PORT;
-        return "Waiting for hotspot or Wi-Fi • TCP/UDP " + PORT;
+        if (state.clientCount > 0) {
+            String clients = getResources().getQuantityString(
+                    R.plurals.tcp_clients,
+                    state.clientCount,
+                    state.clientCount);
+            return getString(R.string.streaming_clients_udp, clients, PORT);
+        }
+        if (state.udpBroadcastTargetCount > 0) {
+            return getString(R.string.broadcasting_nmea_udp, PORT);
+        }
+        return getString(R.string.waiting_hotspot_tcp_udp, PORT);
+    }
+
+    private String anchorModeDisplayName(AnchorAlarm.Mode mode) {
+        return getString(mode == AnchorAlarm.Mode.FREE_SWINGING
+                ? R.string.free_swinging : R.string.shorelined);
     }
 
     private void updateMonitoringNotification() {

@@ -32,6 +32,9 @@
 		E10000000000000000000001 /* DisplayUnits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DisplayUnits.swift */; };
 		F10000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* PrivacyInfo.xcprivacy */; };
 		G10000000000000000000001 /* ReleaseLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = G20000000000000000000001 /* ReleaseLinks.swift */; };
+		H10000000000000000000001 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = H20000000000000000000001 /* Localizable.xcstrings */; };
+		I10000000000000000000001 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = I20000000000000000000001 /* InfoPlist.xcstrings */; };
+		J10000000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = J20000000000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +77,9 @@
 		E20000000000000000000001 /* DisplayUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayUnits.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		G20000000000000000000001 /* ReleaseLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseLinks.swift; sourceTree = "<group>"; };
+		H20000000000000000000001 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		I20000000000000000000001 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		J20000000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +117,9 @@
 				B50000000000000000000005 /* Network */,
 				D20000000000000000000004 /* Products.storekit */,
 				B20000000000000000000008 /* Info.plist */,
+				J20000000000000000000001 /* Assets.xcassets */,
+				I20000000000000000000001 /* InfoPlist.xcstrings */,
+				H20000000000000000000001 /* Localizable.xcstrings */,
 				F20000000000000000000001 /* PrivacyInfo.xcprivacy */,
 			);
 			path = NavionicsGPSBridge;
@@ -258,6 +267,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				J10000000000000000000001 /* Assets.xcassets in Resources */,
+				I10000000000000000000001 /* InfoPlist.xcstrings in Resources */,
+				H10000000000000000000001 /* Localizable.xcstrings in Resources */,
 				F10000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -431,6 +443,7 @@
 		BC0000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = NavionicsGPSBridge/NavionicsGPSBridge.entitlements;
 				CURRENT_PROJECT_VERSION = 4;
@@ -457,6 +470,7 @@
 		BC0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGN_ENTITLEMENTS = NavionicsGPSBridge/NavionicsGPSBridge.entitlements;
 				CURRENT_PROJECT_VERSION = 4;
