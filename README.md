@@ -1,5 +1,17 @@
 # Anchor Watch & GPS Bridge
 
+## Why I built this
+
+On a sailing trip I realised I had no way to get a GPS fix onto my iPad: it has no built-in GPS and there was no simple way to connect it to my phone. So one morning, while we were getting the boat ready, I built an app that streams the phone's position to the iPad as NMEA, which Navionics can read.
+
+A day or two later we watched a yacht at anchor drag towards the shore with no one aboard. So I added an anchor watch: a phone left on the boat watches for anchor drift and alerts a second phone ashore, so the crew can go out for dinner and still know the boat is safe.
+
+It is a small app, built in about a week by directing AI coding agents (Codex and Claude Code). That includes native iOS (Swift) and Android (Java) versions, an encrypted, authenticated shore-monitoring link, and preparation for the App Store and Play Store. I've made it public because it isn't proprietary and it shows what one engineer can ship in a short time with agents. Most of my other work, such as a clinical AI workbench and an energy-plant optimisation model, lives in private repositories. I'm happy to walk through those on request.
+
+Jaco Schieke · [LinkedIn](https://www.linkedin.com/in/jaco-s-900a2b3/)
+
+## What it does
+
 Native iPhone and Android apps that provide two related functions:
 
 - Convert phone GPS fixes into NMEA 0183 for compatible marine navigation apps, including Navionics Boating on a Wi-Fi-only iPad.
